@@ -1,0 +1,41 @@
+{
+    // Global.L1 * (FREE7 - :globalHash7) = 0;
+    "deg": 2,
+    "op": "sub",
+    "values": [
+        {
+            "deg": 2,
+            "op": "mul",
+            "values": [
+                {
+                    "deg": 1,
+                    "id": 0,
+                    "next": false,
+                    "op": "const"
+                },
+                {
+                    "deg": 1,
+                    "op": "sub",
+                    "values": [
+                        {
+                            "deg": 1,
+                            "id": 543,
+                            "next": false,
+                            "op": "cm"
+                        },
+                        {
+                            "deg": 0,
+                            "id": 7,
+                            "op": "public"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "deg": 0,
+            "op": "number",
+            "value": "0"
+        }
+    ]
+}

@@ -1,0 +1,6 @@
+make --dry-run --always-make --keep-going --print-directory
+make: Entering directory '/home/zkronos73/devel/piltools'
+make: Leaving directory '/home/zkronos73/devel/piltools'
+ 
+make: *** No targets specified and no makefile found.  Stop.
+
