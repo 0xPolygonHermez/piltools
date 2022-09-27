@@ -24,24 +24,23 @@ void OperationValue::set(OperationValueType vType, nlohmann::json& node)
 
 FrElement OperationValue::eval(Engine &engine, int64_t w)
 {
-    FrElement result;
     switch(type) {
         case OperationValueType::CONST:
-            break;
+            return engine.getConst(value.u64, w);
         case OperationValueType::CM:
-            break;
+            return engine.getCommited(value.u64, w);
         case OperationValueType::PUBLIC:
-            break;
+            return engine.getPublic(value.u64, w);
         case OperationValueType::EXP:
             break;
         case OperationValueType::NUMBER:
-            break;
+            return value.f;
         case OperationValueType::OP:
-            break;
+            return Goldilocks::zero();
         default:
-            break;
+            return Goldilocks::zero();
     }
-    return result;
+    return Goldilocks::zero();
 }
 }
 

@@ -8,7 +8,7 @@ CFLAGS  = -g -Wall -Wno-unknown-pragmas -I goldilocks/src/
 LDFLAGS  = -lgmp
 
 # The build target
-TARGET = main
+TARGET = ../build/main
 
 all: $(TARGET)
 

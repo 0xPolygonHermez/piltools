@@ -51,10 +51,11 @@ Engine::Engine(const std::string &pilJsonFilename, const std::string &constFilen
     nlohmann::json pil = nlohmann::json::parse(pilFile);
     loadReferences(pil);
     std::cout << "mapping constant file " << constFilename << std::endl;
-    constPols = (uint64_t *)mapFile(constFilename);
+    constPols = (FrElement *)mapFile(constFilename);
     constRefs.map(constPols);
     std::cout << "mapping commited file " << commitFilename << std::endl;
-    cmPols = (uint64_t *)mapFile(commitFilename);
+    std::cout << "sizeof(FrElement): " << sizeof(FrElement) << "\n";
+    cmPols = (FrElement *)mapFile(commitFilename);
     cmRefs.map(cmPols);
     loadPublics(pil);
     checkConnectionIdentities(pil);
@@ -154,7 +155,7 @@ void Engine::checkConnectionIdentities (nlohmann::json &pil)
     std::cout << pilExpressions[1157] << std::endl;
 
     Expression e;
-    e.precompile(pilExpressions[1157]);
+    e.compile(pilExpressions[1157]);
     e.dump();
     e.eval(*this);
     return;

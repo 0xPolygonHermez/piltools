@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <nlohmann/json.hpp>
-
+#include <goldilocks_base_field.hpp>
 namespace pil {
     class Engine;
 }
@@ -25,12 +25,15 @@ class Engine {
         PublicValues publics;
 
         std::map<std::string, const Reference *> referencesByName;
-        uint64_t *constPols;
-        uint64_t *cmPols;
+        FrElement *constPols;
+        FrElement *cmPols;
 
         Engine(const std::string &pilJsonFilename, const std::string &constFilename, const std::string &commitFilename);
         ~Engine (void);
         uint64_t getPolValue(const std::string &name, uint64_t w = 0, uint64_t arrayIndex = 0);
+        FrElement getConst(uint64_t id, int64_t w = 0) { return constPols[w % nConstants]; };
+        FrElement getCommited(uint64_t id, int64_t w = 0) { return cmPols[w % nConstants]; };
+        FrElement getPublic(uint64_t id, int64_t w = 0) { return Goldilocks::fromU64((uint64_t)99); };
     protected:
         void loadReferences(nlohmann::json &pil);
         void loadPublics(nlohmann::json &pil);

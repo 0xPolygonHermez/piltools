@@ -23,9 +23,12 @@ namespace pil {
             Operation operations[16];
             Expressions *parent;
             FrElement getEvaluation(uint64_t w) const;
-            void precompile(nlohmann::json& node, int destination = 0, OperationType opType = OperationType::NONE );
+            bool compiled = false;
+            void compile(nlohmann::json& node );
             void dump(void);
             void eval(Engine &engine);
+        protected:
+            void recursiveCompile(nlohmann::json& node, int destination = 0, OperationType opType = OperationType::NONE );
     };
 }
 #endif
