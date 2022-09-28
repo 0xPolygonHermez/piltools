@@ -1,3 +1,5 @@
+#include <sys/time.h>
+#include <ctime>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -8,8 +10,12 @@
 #include <stdexcept>
 #include <sys/mman.h>
 #include <errno.h>
+#include <list>
+#include <map>
+#include <set>
 #include "engine.hpp"
 #include "expression.hpp"
+#include "reference.hpp"
 
 namespace pil {
 
@@ -28,25 +34,30 @@ void *Engine::mapFile(const std::string &filename)
     close(fd);
     return maddr;
 }
-uint64_t Engine::getPolValue(const std::string &name, uint64_t w, uint64_t arrayIndex )
+
+FrElement Engine::getEvaluation(const std::string &name, omega_t w, index_t index )
 {
     auto pos = referencesByName.find(name);
     if (pos == referencesByName.end()) {
         throw std::runtime_error("Reference "+name+" not found");
     }
     const Reference *pRef = pos->second;
-    if (arrayIndex) {
-        if (arrayIndex >= pRef->len) {
-            throw std::runtime_error("Out of index on Reference "+name+"["+std::to_string(pRef->len)+"] with arrayIndex "+std::to_string(arrayIndex));
+    if (index) {
+        if (index >= pRef->len) {
+            throw std::runtime_error("Out of index on Reference "+name+"["+std::to_string(pRef->len)+"] with arrayIndex "+std::to_string(index));
         }
-        pRef += arrayIndex;
     }
-    std::cout << pRef->name << " = " << FrToString(pRef->getEvaluation(w)) << std::endl;
-    return 0;
+    FrElement evaluation = pRef->getEvaluation(w, index);
+    // std::cout << pRef->name << " = " << FrToString(evaluation) << std::endl;
+    return evaluation;
 }
 
 Engine::Engine(const std::string &pilJsonFilename, const std::string &constFilename, const std::string &commitFilename)
+    :constRefs(ReferenceType::constP), cmRefs(ReferenceType::cmP), imRefs(ReferenceType::imP)
 {
+    n = 0;
+    nCommitments = 0;
+    nConstants = 0;
     std::ifstream pilFile(pilJsonFilename);
     nlohmann::json pil = nlohmann::json::parse(pilFile);
     loadReferences(pil);
@@ -80,37 +91,39 @@ void Engine::loadReferences(nlohmann::json &pil)
     auto pilReferences = pil["references"];
     uint64_t max = 0;
     for (nlohmann::json::iterator it = pilReferences.begin(); it != pilReferences.end(); ++it) {
-        Reference ref;
         std::string name = it.key();
         auto value = it.value();
-        ref.polDeg = value["polDeg"];
+        const dim_t polDeg = value["polDeg"];
         if (!n) {
-            n = ref.polDeg;
+            n = polDeg;
         }
-        ref.id = value["id"];
-        ref.isArray = value["isArray"];
-        ref.len = 1;
-        if (ref.isArray) {
-            ref.len = value["len"];
+        const uid_t id = value["id"];
+        bool isArray = value["isArray"];
+        index_t len = 1;
+        if (isArray) {
+            len = value["len"];
         }
 
-        if (ref.id > max) {
-            max = (ref.id + ref.len - 1);
+        if (id > max) {
+            max = (id + len - 1);
         }
-        ref.type = getReferenceType(name, value["type"]);
-        const Reference *pRef;
-        switch(ref.type) {
+        const ReferenceType type = getReferenceType(name, value["type"]);
+        const Reference *ref;
+        switch(type) {
             case ReferenceType::cmP:
-                pRef = cmRefs.add(name, ref);
+                ref = cmRefs.add(name, id, len);
                 break;
             case ReferenceType::constP:
-                pRef = constRefs.add(name, ref);
+                ref = constRefs.add(name, id, len);
                 break;
             case ReferenceType::imP:
-                pRef = imRefs.add(name, ref);
+                ref = imRefs.add(name, id, len);
+                break;
+            default:
+                ref = NULL;
                 break;
         }
-        referencesByName[name] = pRef;
+        referencesByName[name] = ref;
     }
 
     std::cout << "size:" << pilReferences.size() << "\n";
@@ -124,9 +137,9 @@ void Engine::loadPublics(nlohmann::json &pil)
     auto pilPublics = pil["publics"];
     for (nlohmann::json::iterator it = pilPublics.begin(); it != pilPublics.end(); ++it) {
         std::string name = (*it)["name"];
-        int polId = (*it)["polId"];
-        int idx = (*it)["idx"];
-        int id = (*it)["id"];
+        uid_t polId = (*it)["polId"];
+        index_t idx = (*it)["idx"];
+        uid_t id = (*it)["id"];
         std::string polType = (*it)["polType"];
         std::cout << "name:" << *it << " value:" << std::endl;
         auto type = getReferenceType(name, polType);
@@ -146,18 +159,149 @@ void Engine::loadPublics(nlohmann::json &pil)
     }
 }
 
+void Engine::compileExpressions(nlohmann::json &pil)
+{
+    auto pilExpressions = pil["expressions"];
+    Dependencies dependencies;
+    Expression exprs[pilExpressions.size()];
 
+    uid_t id = 0;
+    for (auto it = pilExpressions.begin(); it != pilExpressions.end(); ++it) {
+        std::cout << "========== compiling " << id << " ==========" << std::endl;
+        exprs[id].compile(*it, dependencies);
+        exprs[id].dump();
+        ++id;
+        // e.eval(*this);
+    }
+}
+
+void Engine::foundAllExpressions (nlohmann::json &pil)
+{
+    std::set<depid_t> eids;
+    std::cout << "SET " << &eids << std::endl;
+
+    std::cout << "connectionIdentities ....." << std::endl;
+    auto connectionIdentities = pil["connectionIdentities"];
+    for (auto it = connectionIdentities.begin(); it != connectionIdentities.end(); ++it) {
+        for (auto ipols = (*it)["pols"].begin(); ipols != (*it)["pols"].end(); ++ipols) {
+            uid_t id = *ipols;
+            std::cout << "adding pols expression: " << id << std::endl;
+            eids.insert(id);
+        }
+        for (auto iconnections = (*it)["connections"].begin(); iconnections != (*it)["connections"].end(); ++iconnections) {
+            uid_t id = *iconnections;
+            std::cout << "adding connections expression: " << id << std::endl;
+            eids.insert(id);
+        }
+    }
+
+    std::cout << "plookupIdentities ....." << std::endl;
+    auto plookupIdentities = pil["plookupIdentities"];
+    for (auto it = plookupIdentities.begin(); it != plookupIdentities.end(); ++it) {
+        for (auto t = (*it)["t"].begin(); t != (*it)["t"].end(); ++t) {
+            uid_t id = *t;
+            std::cout << "adding t expression: " << id << std::endl;
+            eids.insert(id);
+        }
+        for (auto selT = (*it)["selT"].begin(); selT != (*it)["selT"].end(); ++selT) {
+            uid_t id = *selT;
+            std::cout << "adding selT expression: " << id << std::endl;
+            eids.insert(id);
+        }
+        for (auto f = (*it)["f"].begin(); f != (*it)["f"].end(); ++f) {
+            uid_t id = *f;
+            std::cout << "adding f expression: " << id << std::endl;
+            eids.insert(id);
+        }
+        for (auto selF = (*it)["selF"].begin(); selF != (*it)["selF"].end(); ++selF) {
+            uid_t id = *selF;
+            std::cout << "adding selF expression: " << id << std::endl;
+            eids.insert(id);
+        }
+    }
+
+    std::cout << "permutationIdentities ....." << std::endl;
+    auto permutationIdentities = pil["permutationIdentities"];
+    for (auto it = permutationIdentities.begin(); it != permutationIdentities.end(); ++it) {
+        for (auto t = (*it)["t"].begin(); t != (*it)["t"].end(); ++t) {
+            uid_t id = *t;
+            std::cout << "adding t expression: " << id << std::endl;
+            eids.insert(id);
+        }
+        for (auto selT = (*it)["selT"].begin(); selT != (*it)["selT"].end(); ++selT) {
+            uid_t id = *selT;
+            std::cout << "adding selT expression: " << id << std::endl;
+            eids.insert(id);
+        }
+        for (auto f = (*it)["f"].begin(); f != (*it)["f"].end(); ++f) {
+            uid_t id = *f;
+            std::cout << "adding f expression: " << id << std::endl;
+            eids.insert(id);
+        }
+        for (auto selF = (*it)["selF"].begin(); selF != (*it)["selF"].end(); ++selF) {
+            uid_t id = *selF;
+            std::cout << "adding selF expression: " << id << std::endl;
+            eids.insert(id);
+        }
+    }
+
+    std::cout << "polIdentities ....." << std::endl;
+    auto polIdentities = pil["polIdentities"];
+    for (auto it = polIdentities.begin(); it != polIdentities.end(); ++it) {
+        uid_t id = (*it)["e"];
+        std::cout << "adding identity expression: " << id << std::endl;
+        eids.insert(id);
+    }
+
+    auto pilExpressions = pil["expressions"];
+    Dependencies dependencies;
+    Expression *exprs = new Expression[pilExpressions.size()];
+
+    std::cout << "pilExpressions.size():" << pilExpressions.size() << std::endl;
+
+    uid_t id = 0;
+    dim_t aliasCount = 0;
+    dim_t aliasNextCount = 0;
+    for (auto it = pilExpressions.begin(); it != pilExpressions.end(); ++it) {
+        std::cout << "========== compiling " << id << "[" << eids.count(id) << "] ==========" << std::endl;
+        exprs[id].compile(*it, dependencies);
+        // exprs[id].dump();
+        std::cout << "===> compiled " << id << " ops:" << exprs[id].operations.size() << std::endl;
+        if (exprs[id].alias) ++aliasCount;
+        if (exprs[id].next) ++aliasNextCount;
+        ++id;
+    }
+
+    struct timeval time_now;
+    gettimeofday(&time_now, nullptr);
+    time_t startT = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
+
+    const size_t exprsCount = pilExpressions.size();
+    for (omega_t w = 0; w < 65536; ++w) {
+        for (uid_t iexpr = 0; iexpr < exprsCount; ++iexpr) {
+            // std::cout << "========== evaluating " << iexpr << std::endl;
+            exprs[iexpr].eval(*this);
+        }
+    }
+    gettimeofday(&time_now, nullptr);
+    time_t endT = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
+    std::cout << "time(ms):" <<  (endT - startT) << std::endl;
+
+    std::cout << "expressions:" << pilExpressions.size() << " referenced:" << eids.size() << " alias:" << aliasCount
+              << " aliasNextCount:" << aliasNextCount << " dependencies:" << dependencies.size() << "\n";
+}
 
 void Engine::checkConnectionIdentities (nlohmann::json &pil)
 {
-    auto pilExpressions = pil["expressions"];
-    uint64_t id = 0;
-    std::cout << pilExpressions[1157] << std::endl;
+    std::cout << "EXPRESSION[241]" << pil["expressions"][244] << std::endl << std::endl;
+    foundAllExpressions(pil);
+    return;
 
-    Expression e;
-    e.compile(pilExpressions[1157]);
-    e.dump();
-    e.eval(*this);
+    auto pilExpressions = pil["expressions"];
+    uid_t id = 0;
+    std::cout << pilExpressions[1157] << std::endl;
+    std::cout << "expressions: " << pilExpressions.size() << std::endl;
+    compileExpressions(pil);
     return;
 
     for (nlohmann::json::iterator it = pilExpressions.begin(); it != pilExpressions.end(); ++it) {
@@ -176,7 +320,7 @@ void Engine::checkConnectionIdentities (nlohmann::json &pil)
         auto pols = (*it)["pols"];
         for (nlohmann::json::iterator pit = pols.begin(); pit != pols.end(); ++pit) {
             std::cout << "pols " << (*pit) << std::endl;
-            int exprId = *pit;
+            uid_t exprId = *pit;
             calculateExpression(exprId);
         }
         auto connections = (*it)["connections"];
@@ -186,10 +330,10 @@ void Engine::checkConnectionIdentities (nlohmann::json &pil)
     }
 }
 
-FrElement Engine::calculateExpression(uint64_t id)
+const FrElement Engine::calculateExpression(uid_t id)
 {
     std::cout << "calculateExpression: " << id << std::endl;
-
+    return Goldilocks::zero();
 }
 
 Engine::~Engine (void)

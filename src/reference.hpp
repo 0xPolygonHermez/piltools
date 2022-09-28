@@ -15,7 +15,7 @@ namespace pil {
 
 #include "fr_element.hpp"
 #include "references.hpp"
-
+#include "types.hpp"
 
 namespace pil {
 
@@ -24,15 +24,16 @@ enum class ReferenceType {cmP, constP, imP};
 
 class Reference {
     public:
-        uint64_t id = 0;
-        uint64_t polDeg = 0;
-        uint64_t len = 0;
-        uint64_t index = 0;
-        bool isArray = false;
+        References &parent;
+        uint id;
+        uint polDeg;
+        uint len;
+        uint index;
+        bool isArray;
         ReferenceType type;
-        char name[64] = "";
-        References *parent;
-        FrElement getEvaluation(uint64_t w) const;
+        std::string name;
+        FrElement getEvaluation(omega_t w, index_t index = 0) const;
+        Reference (References &parent, uid_t id, dim_t len, index_t index, ReferenceType type, const std::string &name);
 };
 
 }

@@ -14,7 +14,7 @@ void Operation::decodeType(const std::string &value, OperationType &operationTyp
     operationType = (OperationType) ((v && v <= '9') ? (int)(v - '0'): 0);
     valueType = (OperationValueType)((v && v >= 'A') ? ((int)(v - 'A')+1): 0);
 
-    std::cout << "## DECODE ## " << value << " " << operationType << " " << valueType << std::endl;
+    // std::cout << "## DECODE ## " << value << " " << operationType << " " << valueType << std::endl;
 }
 
 }

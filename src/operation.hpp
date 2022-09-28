@@ -18,7 +18,7 @@ class Operation {
     public:
         static const char *typeLabels[];
 
-        OperationType op;
+        OperationType op = OperationType::NONE;
         OperationValue values[2];
         FrElement result;
         Operation(void) { op = OperationType::NONE; Goldilocks::zero(result); }

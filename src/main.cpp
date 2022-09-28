@@ -85,9 +85,9 @@ int main ( int argc, char *argv [])
     u64Log2(0);
 
     pil::Engine engine(pilJsonFilename, constFilename, commitFilename);
-    engine.getPolValue("Main.STEP", 10);
-    engine.getPolValue("Arith.x1", 12, 3);
-    engine.getPolValue("Main.A0", 12);
-    engine.getPolValue("Main.STEP", 689584);
+    engine.getEvaluation("Main.STEP", 10);
+    engine.getEvaluation("Arith.x1", 12, 3);
+    engine.getEvaluation("Main.A0", 12);
+    engine.getEvaluation("Main.STEP", 689584);
     // std::cout << pil.dump() << std::endl;
 }

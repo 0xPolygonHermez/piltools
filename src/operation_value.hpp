@@ -10,6 +10,7 @@ namespace pil {
 }
 
 #include "fr_element.hpp"
+#include "types.hpp"
 #include "engine.hpp"
 
 namespace pil {
@@ -24,10 +25,12 @@ class OperationValue
         OperationValueType type;
         union {
             uint64_t u64;
+            uid_t id;
             FrElement f;
         } value;
-        void set(OperationValueType vType, nlohmann::json& node);
-        FrElement eval(Engine &engine, int64_t w = 0);
+        depid_t set(OperationValueType vType, nlohmann::json& node);
+        FrElement eval(Engine &engine, omega_t w = 0);
+        OperationValue ( void ) { type = OperationValueType::NONE; value.u64 = 0; }
 };
 
 }

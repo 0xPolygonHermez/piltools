@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <nlohmann/json.hpp>
-
+#include <vector>
 namespace pil {
     class Expression;
 }
@@ -11,24 +11,33 @@ namespace pil {
 #include "operation.hpp"
 #include "fr_element.hpp"
 #include "engine.hpp"
-#include "expressions.hpp"
+// #include "expressions.hpp"
+#include "dependencies.hpp"
 
 namespace pil {
     class Expression {
         public:
 
-            uint64_t id = 0;
-            char name[64] = "";
-            int opIndex = 0;
-            Operation operations[16];
-            Expressions *parent;
-            FrElement getEvaluation(uint64_t w) const;
-            bool compiled = false;
-            void compile(nlohmann::json& node );
-            void dump(void);
-            void eval(Engine &engine);
+            uid_t id;
+            std::string name;
+            dim_t next;
+
+            std::vector<Operation> operations;
+            // Expressions *parent;
+            bool alias;
+            bool compiled;
+            FrElement *aliasEvaluations;
+
+            FrElement getEvaluation(omega_t w) const;
+
+            void compile (nlohmann::json& node, Dependencies &dependencies);
+            void dump (void);
+            void eval (Engine &engine);
+            Expression (void);
         protected:
-            void recursiveCompile(nlohmann::json& node, int destination = 0, OperationType opType = OperationType::NONE );
+            void recursiveCompile (nlohmann::json& node, dim_t destination, OperationType opType, Dependencies &dependencies);
+            dim_t getFreeId (void);
     };
 }
+
 #endif

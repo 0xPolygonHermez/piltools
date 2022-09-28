@@ -2,42 +2,19 @@
 
 namespace pil {
 
-const Reference *References::add(const std::string &name, const Reference &value)
+References::References (ReferenceType type)
+    :type(type)
 {
-    int len = value.len > 0 ? value.len : 1;
-    int maxid = value.id + len - 1;
-    if (maxid >= size) {
-        uint64_t previousSize = size;
-        while (maxid >= size) {
-            size += 1000;
-        }
-        if (values) {
-            values = (Reference *)realloc(values, size * sizeof(Reference));
-        } else {
-            values = (Reference *)malloc(size * sizeof(Reference));
-        }
-        if (!values) {
-            throw std::runtime_error("Error on malloc/realloc " +std::to_string(size)+ " values");
-        }
-        memset(values + previousSize, 0, (size - previousSize) * sizeof(Reference));
+}
+
+const Reference *References::add(const std::string &name, uid_t id, dim_t len)
+{
+    if (!len) len = 1;
+    for (index_t index = 0; index < len; ++ index) {
+        index_t rindex = id + index;
+        values[rindex] = new Reference(*this, rindex, len, index, type, name);
     }
-    for (int index = 0; index < len; ++ index) {
-        int rindex = value.id + index;
-        ++count;
-        if (values[rindex].id) {
-            std::cout << "ooohh !!! " << values[rindex].name << " by " << name << std::endl;
-        }
-        values[rindex] = value;
-        if (value.isArray) {
-            snprintf(values[rindex].name, sizeof(value.name), "%s[%d]", name.c_str(), index);
-        } else {
-            snprintf(values[rindex].name, sizeof(value.name), "%s", name.c_str());
-        }
-        values[rindex].index = index;
-        values[rindex].id = rindex;
-        values[rindex].parent = this;
-    }
-    return values + value.id;
+    return values[id];
 }
 /*
 const Reference *References::add(const std::string &name, const Reference &value)
@@ -45,9 +22,9 @@ const Reference *References::add(const std::string &name, const Reference &value
 
 }*/
 
-const Reference *References::get(uint64_t id)
+const Reference *References::get(uid_t id)
 {
-    return values + id;
+    return values[id];
 }
 
 void References::map(void *data)
@@ -55,14 +32,17 @@ void References::map(void *data)
     evaluations = (FrElement *)data;
 }
 
-FrElement References::getEvaluation(uint64_t id, uint64_t w)
+FrElement References::getEvaluation(uid_t id, omega_t w, index_t index)
 {
-    return evaluations[ w * count + id];
+    std::cout << "getEvaluation(" << id << "," << w << "," << index << ") p=" << evaluations << std::endl;
+
+    uint64_t offset = (uint64_t)w * values.size() + id + index;
+    return evaluations[offset];
 }
 
-std::string References::getName(uint64_t id)
+std::string References::getName(uid_t id)
 {
-    return values[id].name;
+    return values[id]->name;
 }
 
 }

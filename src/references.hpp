@@ -2,7 +2,9 @@
 #define __PIL__REFERENCES__HPP__
 
 #include <nlohmann/json.hpp>
+#include <map>
 #include "fr_element.hpp"
+#include "types.hpp"
 
 namespace pil {
     class References;
@@ -14,15 +16,15 @@ namespace pil {
 
 class References {
     public:
-        const Reference *add(const std::string &name, const Reference &value);
-        const Reference *get(uint64_t id);
+        const Reference *add(const std::string &name, uid_t id, dim_t len);
+        const Reference *get(uid_t id);
         void map(void *data);
-        FrElement getEvaluation(uint64_t id, uint64_t w);
-        std::string getName(uint64_t id);
+        FrElement getEvaluation(uid_t id, omega_t w, index_t index = 0);
+        std::string getName(uid_t id);
+        References (ReferenceType type);
     protected:
-        int count = 0;
-        int size = 0;
-        Reference *values = NULL;
+        ReferenceType type;
+        std::map<uid_t, Reference *> values;
         FrElement *evaluations;
 };
 

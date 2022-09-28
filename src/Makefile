@@ -4,7 +4,8 @@ CC = g++
 # compiler flags:
 #  -g     - this flag adds debugging information to the executable file
 #  -Wall  - this flag is used to turn on most compiler warnings
-CFLAGS  = -g -Wall -Wno-unknown-pragmas -I goldilocks/src/
+# CFLAGS  = -g -O2 -Wall -fsanitize=leak -std=c++11 -Wno-unknown-pragmas -I goldilocks/src/
+CFLAGS  = -g -O3 -Wall -std=c++11 -Wno-unknown-pragmas -I goldilocks/src/
 LDFLAGS  = -lgmp
 
 # The build target

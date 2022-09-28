@@ -8,26 +8,27 @@ namespace pil {
 
 #include <stdint.h>
 #include <string>
+#include <map>
 #include "fr_element.hpp"
 
 namespace pil {
     class PublicValue {
         public:
-            char name[64];
-            int id;
+            std::string name;
+            uid_t id;
             FrElement value;
+            PublicValue(void) { id = 0; value = Goldilocks::zero (); }
     };
 
 
     class PublicValues {
         public:
-            void add(int id, const std::string &name, FrElement value);
-            FrElement getValue(uint64_t id) { return values[id].value; }
-            std::string getName(uint64_t id) { return values[id].name; }
+            void add(uid_t id, const std::string &name, FrElement value);
+            FrElement getValue(uid_t id) { return values[id].value; }
+            std::string getName(uid_t id) { return values[id].name; }
+            PublicValues(void) {}
         protected:
-            int count = 0;
-            int size = 0;
-            PublicValue *values = NULL;
+            std::map<uint, PublicValue> values;
     };
 }
 

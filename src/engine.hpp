@@ -10,17 +10,18 @@ namespace pil {
 
 #include "references.hpp"
 #include "public.hpp"
+#include "types.hpp"
 
 namespace pil {
 
 class Engine {
     public:
-        uint64_t n = 0;
-        uint64_t nCommitments = 0;
-        uint64_t nConstants = 0;
+        dim_t n;
+        dim_t nCommitments;
+        dim_t nConstants;
 
-        References cmRefs;
         References constRefs;
+        References cmRefs;
         References imRefs;
         PublicValues publics;
 
@@ -30,18 +31,20 @@ class Engine {
 
         Engine(const std::string &pilJsonFilename, const std::string &constFilename, const std::string &commitFilename);
         ~Engine (void);
-        uint64_t getPolValue(const std::string &name, uint64_t w = 0, uint64_t arrayIndex = 0);
-        FrElement getConst(uint64_t id, int64_t w = 0) { return constPols[w % nConstants]; };
-        FrElement getCommited(uint64_t id, int64_t w = 0) { return cmPols[w % nConstants]; };
-        FrElement getPublic(uint64_t id, int64_t w = 0) { return Goldilocks::fromU64((uint64_t)99); };
+        FrElement getEvaluation(const std::string &name, omega_t w = 0, index_t index = 0);
+        const FrElement getConst(uid_t id, omega_t w = 0) { return constPols[w % nConstants]; };
+        const FrElement getCommited(uid_t id, omega_t w = 0) { return cmPols[w % nConstants]; };
+        const FrElement getPublic(uid_t id, omega_t w = 0) { return Goldilocks::fromU64((uint64_t)99); };
     protected:
         void loadReferences(nlohmann::json &pil);
         void loadPublics(nlohmann::json &pil);
         void checkConnectionIdentities(nlohmann::json &pil);
-        FrElement calculateExpression(uint64_t id);
+        const FrElement calculateExpression(uid_t id);
         ReferenceType getReferenceType(const std::string &name, const std::string &type);
         void *mapFile(const std::string &filename);
         void precompileExpression(nlohmann::json& node);
+        void compileExpressions(nlohmann::json& node);
+        void foundAllExpressions(nlohmann::json& node);
 };
 
 }
