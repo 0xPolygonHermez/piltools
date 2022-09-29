@@ -4,14 +4,9 @@
 #include <stdint.h>
 #include <nlohmann/json.hpp>
 #include <vector>
-namespace pil {
-    class Expression;
-}
 
 #include "operation.hpp"
 #include "fr_element.hpp"
-#include "engine.hpp"
-// #include "expressions.hpp"
 #include "dependencies.hpp"
 
 namespace pil {
@@ -23,6 +18,7 @@ namespace pil {
             dim_t next;
 
             std::vector<Operation> operations;
+            Dependencies dependencies;
             // Expressions *parent;
             bool alias;
             bool compiled;
@@ -30,12 +26,17 @@ namespace pil {
 
             FrElement getEvaluation(omega_t w) const;
 
-            void compile (nlohmann::json& node, Dependencies &dependencies);
+            void compile (nlohmann::json& node);
             void dump (void);
-            void eval (Engine &engine);
+            FrElement eval (Engine &engine, omega_t w = 0);
             Expression (void);
+            OperationValueType getAliasType ( void );
+            FrElement getAliasValue ( void );
+            uint64_t getAliasValueU64 ( void );
+            bool isAlias ( void ) { return alias; };
+            uint replaceOperationValue(OperationValueType oldValueType, uint64_t oldValue, OperationValueType newValueType, uint64_t newValue);
         protected:
-            void recursiveCompile (nlohmann::json& node, dim_t destination, OperationType opType, Dependencies &dependencies);
+            void recursiveCompile (nlohmann::json& node, dim_t destination, OperationType opType);
             dim_t getFreeId (void);
     };
 }

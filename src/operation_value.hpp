@@ -5,13 +5,12 @@
 #include <nlohmann/json.hpp>
 
 namespace pil {
-    class OperationValue;
-    enum class OperationValueType;
+    class Engine;
 }
 
 #include "fr_element.hpp"
 #include "types.hpp"
-#include "engine.hpp"
+// #include "engine.hpp"
 
 namespace pil {
 
@@ -28,7 +27,7 @@ class OperationValue
             uid_t id;
             FrElement f;
         } value;
-        depid_t set(OperationValueType vType, nlohmann::json& node);
+        uid_t set(OperationValueType vType, nlohmann::json& node);
         FrElement eval(Engine &engine, omega_t w = 0);
         OperationValue ( void ) { type = OperationValueType::NONE; value.u64 = 0; }
 };

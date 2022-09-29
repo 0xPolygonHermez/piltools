@@ -1,10 +1,11 @@
 #include "operation_value.hpp"
+#include "engine.hpp"
 
 namespace pil {
 
 const char *OperationValue::typeLabels[] = {"none", "cm", "const", "expr", "number", "public", "op"};
 
-depid_t OperationValue::set(OperationValueType vType, nlohmann::json& node)
+uid_t OperationValue::set(OperationValueType vType, nlohmann::json& node)
 {
     type = vType;
     if (type == OperationValueType::CONST ||
@@ -37,9 +38,9 @@ FrElement OperationValue::eval(Engine &engine, omega_t w)
         case OperationValueType::NUMBER:
             return value.f;
         case OperationValueType::OP:
-            return Goldilocks::zero();
+            throw std::runtime_error("Unexpected operation value type OP");
         default:
-            return Goldilocks::zero();
+            throw std::runtime_error("Unknow operation value type "+std::to_string((uint)type));
     }
     return Goldilocks::zero();
 }

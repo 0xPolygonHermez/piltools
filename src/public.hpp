@@ -10,6 +10,7 @@ namespace pil {
 #include <string>
 #include <map>
 #include "fr_element.hpp"
+#include "types.hpp"
 
 namespace pil {
     class PublicValue {

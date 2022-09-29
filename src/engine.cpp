@@ -159,25 +159,14 @@ void Engine::loadPublics(nlohmann::json &pil)
     }
 }
 
-void Engine::compileExpressions(nlohmann::json &pil)
+void Engine::loadAndCompileExpressions(nlohmann::json &pil)
 {
-    auto pilExpressions = pil["expressions"];
-    Dependencies dependencies;
-    Expression exprs[pilExpressions.size()];
-
-    uid_t id = 0;
-    for (auto it = pilExpressions.begin(); it != pilExpressions.end(); ++it) {
-        std::cout << "========== compiling " << id << " ==========" << std::endl;
-        exprs[id].compile(*it, dependencies);
-        exprs[id].dump();
-        ++id;
-        // e.eval(*this);
-    }
+    expressions.loadAndCompile(pil["expressions"]);
 }
 
 void Engine::foundAllExpressions (nlohmann::json &pil)
 {
-    std::set<depid_t> eids;
+    std::set<uid_t> eids;
     std::cout << "SET " << &eids << std::endl;
 
     std::cout << "connectionIdentities ....." << std::endl;
@@ -253,42 +242,38 @@ void Engine::foundAllExpressions (nlohmann::json &pil)
         eids.insert(id);
     }
 
+    /*
     auto pilExpressions = pil["expressions"];
     Dependencies dependencies;
-    Expression *exprs = new Expression[pilExpressions.size()];
+    const dim_t exprsCount = pilExpressions.size();
+    Expression *exprs = new Expression[exprsCount];
 
     std::cout << "pilExpressions.size():" << pilExpressions.size() << std::endl;
 
-    uid_t id = 0;
+    uid_t index = 0;
     dim_t aliasCount = 0;
     dim_t aliasNextCount = 0;
     for (auto it = pilExpressions.begin(); it != pilExpressions.end(); ++it) {
-        std::cout << "========== compiling " << id << "[" << eids.count(id) << "] ==========" << std::endl;
-        exprs[id].compile(*it, dependencies);
+        std::cout << "========== compiling " << index << "[" << eids.count(index) << "] ==========" << std::endl;
+        exprs[index].compile(*it);
         // exprs[id].dump();
-        std::cout << "===> compiled " << id << " ops:" << exprs[id].operations.size() << std::endl;
-        if (exprs[id].alias) ++aliasCount;
-        if (exprs[id].next) ++aliasNextCount;
-        ++id;
+        if (exprs[index].alias) ++aliasCount;
+        if (exprs[index].next) ++aliasNextCount;
+        ++index;
     }
 
-    struct timeval time_now;
-    gettimeofday(&time_now, nullptr);
-    time_t startT = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
-
-    const size_t exprsCount = pilExpressions.size();
-    for (omega_t w = 0; w < 65536; ++w) {
-        for (uid_t iexpr = 0; iexpr < exprsCount; ++iexpr) {
-            // std::cout << "========== evaluating " << iexpr << std::endl;
-            exprs[iexpr].eval(*this);
-        }
+    for (auto index = 0; index < exprsCount; ++index) {
+        exprs[index].getDependencies(dependencies);
     }
-    gettimeofday(&time_now, nullptr);
-    time_t endT = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
-    std::cout << "time(ms):" <<  (endT - startT) << std::endl;
+    */
+    loadAndCompileExpressions(pil);
+    // reduceNumberAliasExpressions();
+    expressions.reduceAliasExpressions();
+    expressions.calculateDependencies();
+    expressions.evalAll(*this);
 
-    std::cout << "expressions:" << pilExpressions.size() << " referenced:" << eids.size() << " alias:" << aliasCount
-              << " aliasNextCount:" << aliasNextCount << " dependencies:" << dependencies.size() << "\n";
+    std::cout << "expressions:" << nExpressions << " referenced:" << eids.size() /* << " alias:" << aliasCount
+              << " aliasNextCount:" << aliasNextCount*/ << " dependencies:" << expressions.dependencies.size() << "\n";
 }
 
 void Engine::checkConnectionIdentities (nlohmann::json &pil)
@@ -301,7 +286,7 @@ void Engine::checkConnectionIdentities (nlohmann::json &pil)
     uid_t id = 0;
     std::cout << pilExpressions[1157] << std::endl;
     std::cout << "expressions: " << pilExpressions.size() << std::endl;
-    compileExpressions(pil);
+    // compileExpressions(pil);
     return;
 
     for (nlohmann::json::iterator it = pilExpressions.begin(); it != pilExpressions.end(); ++it) {

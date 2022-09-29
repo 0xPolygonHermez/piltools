@@ -16,11 +16,17 @@ namespace pil {
 
 class Dependencies {
     public:
-        std::list<depid_t> pending;
-        std::list<depid_t> handled;
-        bool add (depid_t expressionId);
-        size_t size ( void ) const { return pending.size() + handled.size(); };
-        Dependencies ( void ) {};
+        bool add (uid_t expressionId);
+        bool onlyAddIfNew(Dependencies &globalDeps, uid_t expressionId);
+        bool contains (uid_t expressionId);
+        uint merge (Dependencies &deps);
+        size_t size ( void ) const { return expressionIds.size(); };
+        uid_t& operator[](int index) { return expressionIds[index]; };
+        Dependencies ( void ):globalDependencies(NULL) {};
+        Dependencies ( Dependencies &globalDependencies ): globalDependencies(&globalDependencies) {};
+    protected:
+        Dependencies *globalDependencies;
+        std::vector<uid_t> expressionIds;
 };
 
 }

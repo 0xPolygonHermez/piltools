@@ -10,7 +10,10 @@ namespace pil {
 
 #include "references.hpp"
 #include "public.hpp"
+#include "expressions.hpp"
 #include "types.hpp"
+#include "operation.hpp"
+#include "dependencies.hpp"
 
 namespace pil {
 
@@ -19,11 +22,13 @@ class Engine {
         dim_t n;
         dim_t nCommitments;
         dim_t nConstants;
+        dim_t nExpressions;
 
         References constRefs;
         References cmRefs;
         References imRefs;
         PublicValues publics;
+        Expressions expressions;
 
         std::map<std::string, const Reference *> referencesByName;
         FrElement *constPols;
@@ -43,8 +48,9 @@ class Engine {
         ReferenceType getReferenceType(const std::string &name, const std::string &type);
         void *mapFile(const std::string &filename);
         void precompileExpression(nlohmann::json& node);
-        void compileExpressions(nlohmann::json& node);
+        void loadAndCompileExpressions(nlohmann::json& node);
         void foundAllExpressions(nlohmann::json& node);
+
 };
 
 }

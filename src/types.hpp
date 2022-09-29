@@ -3,12 +3,12 @@
 #include <stdint.h>
 
 namespace pil {
-    typedef unsigned int uint;
-    typedef unsigned int uid_t;
-    typedef unsigned int omega_t;
-    typedef unsigned int index_t;
-    typedef unsigned int dim_t;
-    typedef unsigned int depid_t;
+    typedef uint32_t uint;
+    typedef uint32_t uid_t;
+    typedef uint32_t omega_t;
+    typedef uint32_t index_t;
+    typedef uint32_t dim_t;
+    // typedef uint32_t depid_t;
 
 }
 

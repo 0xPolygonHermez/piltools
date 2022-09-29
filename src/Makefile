@@ -4,8 +4,8 @@ CC = g++
 # compiler flags:
 #  -g     - this flag adds debugging information to the executable file
 #  -Wall  - this flag is used to turn on most compiler warnings
-# CFLAGS  = -g -O2 -Wall -fsanitize=leak -std=c++11 -Wno-unknown-pragmas -I goldilocks/src/
-CFLAGS  = -g -O3 -Wall -std=c++11 -Wno-unknown-pragmas -I goldilocks/src/
+# CFLAGS  = -g -O2 -H  -Wall -fsanitize=leak -std=c++11 -Wno-unknown-pragmas -I goldilocks/src/
+CFLAGS  = -g -O3 -Wall -std=c++17 -Wno-unknown-pragmas -I goldilocks/src/
 LDFLAGS  = -lgmp
 
 # The build target
@@ -16,7 +16,8 @@ all: $(TARGET)
 #	$(CC) $(CFLAGS) -o $(TARGET) references.cpp reference.cpp main.cpp  goldilocks/src/goldilocks_base_field.cpp $(LDFLAGS)
 
 $(TARGET): *.cpp *.hpp
-	$(CC) $(CFLAGS) -o $(TARGET) *.cpp  goldilocks/src/goldilocks_base_field.cpp $(LDFLAGS)
+#	$(CC) $(CFLAGS) -o $(TARGET) engine.cpp expression.cpp dependencies.cpp operation_value.cpp operation.cpp public.cpp reference.cpp references.cpp goldilocks/src/goldilocks_base_field.cpp $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(TARGET) *.cpp goldilocks/src/goldilocks_base_field.cpp $(LDFLAGS)
 
 clean:
 	$(RM) $(TARGET)
