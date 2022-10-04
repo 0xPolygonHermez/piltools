@@ -24,6 +24,7 @@ class Dependencies {
         uid_t& operator[](int index) { return expressionIds[index]; };
         Dependencies ( void ):globalDependencies(NULL) {};
         Dependencies ( Dependencies &globalDependencies ): globalDependencies(&globalDependencies) {};
+        void dump ( void ) const;
     protected:
         Dependencies *globalDependencies;
         std::vector<uid_t> expressionIds;

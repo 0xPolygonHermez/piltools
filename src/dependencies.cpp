@@ -33,7 +33,7 @@ uint Dependencies::merge(Dependencies &deps)
 {
     uint count = 0;
     for (auto it = deps.expressionIds.begin(); it != deps.expressionIds.end(); ++it) {
-        if (std::find(expressionIds.begin(), expressionIds.end(), *it) == expressionIds.end()) {
+        if (std::find(expressionIds.begin(), expressionIds.end(), *it) != expressionIds.end()) {
             continue;
         }
         ++count;
@@ -41,5 +41,16 @@ uint Dependencies::merge(Dependencies &deps)
     }
     return count;
 }
+
+void Dependencies::dump ( void ) const
+{
+    std::cout << "DEPS[" << expressionIds.size() << "]";
+    for (auto it = expressionIds.begin(); it != expressionIds.end(); ++it) {
+        std::cout << " " << *it;
+    }
+    std::cout << std::endl;
+}
+
+
 
 }

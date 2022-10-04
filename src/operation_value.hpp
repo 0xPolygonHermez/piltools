@@ -22,14 +22,15 @@ class OperationValue
         static const char *typeLabels[];
 
         OperationValueType type;
+        uint next;
         union {
             uint64_t u64;
             uid_t id;
             FrElement f;
         } value;
         uid_t set(OperationValueType vType, nlohmann::json& node);
-        FrElement eval(Engine &engine, omega_t w = 0);
-        OperationValue ( void ) { type = OperationValueType::NONE; value.u64 = 0; }
+        FrElement eval(Engine &engine, omega_t w = 0, bool debug = false);
+        OperationValue ( void ) { type = OperationValueType::NONE; value.u64 = 0; next = 0; };
 };
 
 }

@@ -17,9 +17,15 @@
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
+
 const std::string pilJsonFilename = "../../data/v0.3.0.0-rc.1/main.pil.json";
 const std::string constFilename = "../../data/v0.3.0.0-rc.1/zkevm.const";
 const std::string commitFilename = "../../data/v0.3.0.0-rc.1/zkevm.commit";
+/*
+const std::string pilJsonFilename = "../../data/v0.4.0.0-rc.1-basic/basic_main.pil.json";
+const std::string constFilename = "../../data/v0.4.0.0-rc.1-basic/zkevm.const";
+const std::string commitFilename = "../../data/v0.4.0.0-rc.1-basic/zkevm.commit";
+*/
 
 uint64_t u64Log2 ( uint64_t value )
 {
@@ -86,8 +92,8 @@ int main ( int argc, char *argv [])
 
     pil::Engine engine(pilJsonFilename, constFilename, commitFilename);
     engine.getEvaluation("Main.STEP", 10);
-    engine.getEvaluation("Arith.x1", 12, 3);
+    // engine.getEvaluation("Arith.x1", 12, 3);
     engine.getEvaluation("Main.A0", 12);
-    engine.getEvaluation("Main.STEP", 689584);
+    engine.getEvaluation("Main.STEP", 9584);
     // std::cout << pil.dump() << std::endl;
 }

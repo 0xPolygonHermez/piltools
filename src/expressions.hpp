@@ -22,7 +22,7 @@ class Expressions {
         const Reference *get (uint id) { return values + id; };
         void map (void *data) { evaluations = (FrElement *)data; }
         FrElement getEvaluation (uint id, uint w);
-        std::string getName (uint id) { return values[id].name; }
+        const std::string &getName (uint id) { return values[id].name; }
         void calculateDependencies (void);
         void recursiveCalculateDependencies (uid_t expressionId);
         uint reduceNumberAliasExpressions (void);
@@ -30,10 +30,15 @@ class Expressions {
         uint replaceOperationValue (OperationValueType oldValueType, uint64_t oldValue, OperationValueType newValueType, uint64_t newValue);
         void loadAndCompile (nlohmann::json &pilExpressions);
         void evalAll (Engine &engine);
+        void debugEval (Engine &engine, uid_t expressionId, omega_t w = 0);
+        void dumpExpression (uid_t expressionId) { expressions[expressionId].dump(); };
+        Expressions ( void );
+        ~Expressions ( void );
     protected:
-        int count = 0;
+        uint count = 0;
         Reference *values = NULL;
         FrElement *evaluations;
+        void compileExpression(nlohmann::json &pilExpressions, uid_t id);
 };
 
 }

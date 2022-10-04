@@ -7,6 +7,13 @@ References::References (ReferenceType type)
 {
 }
 
+References::~References ()
+{
+    for (auto it = values.begin(); it != values.end(); ++it) {
+        delete it->second;
+    }
+}
+
 const Reference *References::add(const std::string &name, uid_t id, dim_t len)
 {
     if (!len) len = 1;
@@ -40,9 +47,9 @@ FrElement References::getEvaluation(uid_t id, omega_t w, index_t index)
     return evaluations[offset];
 }
 
-std::string References::getName(uid_t id)
+const std::string &References::getName(uid_t id) const
 {
-    return values[id]->name;
+    return values.at(id)->getName();
 }
 
 }

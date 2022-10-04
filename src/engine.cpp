@@ -123,7 +123,14 @@ void Engine::loadReferences(nlohmann::json &pil)
                 ref = NULL;
                 break;
         }
-        referencesByName[name] = ref;
+        const bool found = referencesByName.find(name) != referencesByName.end();
+        if (found) {
+            std::cout << "DUPLICATED " << name << std::endl;
+            throw std::runtime_error("Duplicated "+name);
+        }
+        if (ref) {
+            referencesByName[name] = ref;
+        }
     }
 
     std::cout << "size:" << pilReferences.size() << "\n";
@@ -269,16 +276,34 @@ void Engine::foundAllExpressions (nlohmann::json &pil)
     loadAndCompileExpressions(pil);
     // reduceNumberAliasExpressions();
     expressions.reduceAliasExpressions();
-    expressions.calculateDependencies();
+    // expressions.calculateDependencies();
     expressions.evalAll(*this);
-
+    /*
+    uint64_t *exprs = (uint64_t *)mapFile("../../data/v0.4.0.0-rc.1-basic/zkevm.expr");
+    for (uint w = 0; w < n; ++w) {
+        if (w && (w % 1000 == 0)) std::cout << "w:" << w << std::endl;
+        for (uint index = 0; index < 90; ++index) {
+            const uint64_t evaluation = Goldilocks::toU64(expressions.getEvaluation(index, w));
+            const uint64_t _evaluation = exprs[index + 90 * w];
+            if (evaluation != _evaluation) {
+                std::cout << "w:" << w << " [" << index << "/" << w << "]" << _evaluation << " " << evaluation << std::endl;
+            }
+        }
+    }
+    std::cout << "EXPR67" << pil["expressions"][67] << std::endl;
+    expressions.dumpExpression(67);
+    expressions.debugEval(*this, 67, 0);
+    expressions.dumpExpression(67);
+    std::cout << "EXPR84" << pil["expressions"][84] << std::endl;
+    expressions.dumpExpression(84);
+    */
     std::cout << "expressions:" << nExpressions << " referenced:" << eids.size() /* << " alias:" << aliasCount
               << " aliasNextCount:" << aliasNextCount*/ << " dependencies:" << expressions.dependencies.size() << "\n";
+
 }
 
 void Engine::checkConnectionIdentities (nlohmann::json &pil)
 {
-    std::cout << "EXPRESSION[241]" << pil["expressions"][244] << std::endl << std::endl;
     foundAllExpressions(pil);
     return;
 
@@ -323,8 +348,6 @@ const FrElement Engine::calculateExpression(uid_t id)
 
 Engine::~Engine (void)
 {
-
 }
-
 
 }

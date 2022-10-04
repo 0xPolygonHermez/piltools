@@ -26,14 +26,14 @@ namespace pil {
 
             FrElement getEvaluation(omega_t w) const;
 
-            void compile (nlohmann::json& node);
-            void dump (void);
-            FrElement eval (Engine &engine, omega_t w = 0);
             Expression (void);
-            OperationValueType getAliasType ( void );
-            FrElement getAliasValue ( void );
-            uint64_t getAliasValueU64 ( void );
-            bool isAlias ( void ) { return alias; };
+            bool compile (nlohmann::json &node);
+            void dump (void) const;
+            FrElement eval (Engine &engine, omega_t w = 0, bool debug = false);
+            OperationValueType getAliasType ( void ) const;
+            FrElement getAliasValue ( void ) const;
+            uint64_t getAliasValueU64 ( void ) const;
+            bool isAlias ( void ) const { return alias; };
             uint replaceOperationValue(OperationValueType oldValueType, uint64_t oldValue, OperationValueType newValueType, uint64_t newValue);
         protected:
             void recursiveCompile (nlohmann::json& node, dim_t destination, OperationType opType);

@@ -51,6 +51,22 @@
         "valarray": "cpp",
         "list": "cpp",
         "set": "cpp",
-        "filesystem": "cpp"
-    }
+        "filesystem": "cpp",
+        "any": "cpp",
+        "atomic": "cpp",
+        "condition_variable": "cpp",
+        "cstdarg": "cpp",
+        "algorithm": "cpp",
+        "iterator": "cpp",
+        "memory_resource": "cpp",
+        "optional": "cpp",
+        "random": "cpp",
+        "mutex": "cpp",
+        "semaphore": "cpp",
+        "stop_token": "cpp",
+        "thread": "cpp",
+        "cinttypes": "cpp",
+        "variant": "cpp"
+    },
+    "C_Cpp.default.configurationProvider": "ms-vscode.makefile-tools"
 }

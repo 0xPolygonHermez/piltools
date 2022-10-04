@@ -16,27 +16,27 @@ Expression::Expression (void)
     aliasEvaluations = NULL;
 }
 
-OperationValueType Expression::getAliasType ( void )
+OperationValueType Expression::getAliasType ( void ) const
 {
     if (!alias) return OperationValueType::NONE;
     return operations[0].values[0].type;
 }
 
-FrElement Expression::getAliasValue ( void )
+FrElement Expression::getAliasValue ( void ) const
 {
     if (!alias) return Goldilocks::zero();
     return operations[0].values[0].value.f;
 }
 
-uint64_t Expression::getAliasValueU64 ( void )
+uint64_t Expression::getAliasValueU64 ( void ) const
 {
     if (!alias) return 0;
     return operations[0].values[0].value.u64;
 }
 
-void Expression::compile(nlohmann::json& node)
+bool Expression::compile(nlohmann::json &node)
 {
-    if (compiled) return;
+    if (compiled) return false;
 
     OperationValueType vType;
     OperationType opType;
@@ -59,6 +59,7 @@ void Expression::compile(nlohmann::json& node)
         if (next) std::cout << "NEXT ALIAS FOUND" << std::endl;
     }
     compiled = true;
+    return true;
 }
 
 void Expression::recursiveCompile(nlohmann::json& node, dim_t destination, OperationType opType)
@@ -87,7 +88,7 @@ void Expression::recursiveCompile(nlohmann::json& node, dim_t destination, Opera
     }
 }
 
-void Expression::dump(void)
+void Expression::dump(void) const
 {
     for (uint index = 0; index < operations.size(); ++index) {
         printf("%2u|%02X|%-6s(%d)|%-6s(%d)|0x%016lX|%-6s(%d)|0x%016lX|0x%016lX\n", index, index, Operation::typeLabels[(int)operations[index].op], (int)operations[index].op,
@@ -105,20 +106,27 @@ dim_t Expression::getFreeId(void)
     return id;
 }
 
-FrElement Expression::eval(Engine &engine, omega_t w)
+FrElement Expression::eval(Engine &engine, omega_t w, bool debug)
 {
     if (alias) return Goldilocks::zero();
     for (int index = operations.size() - 1; index >= 0; --index) {
         FrElement values[2];
 
+        if (debug) {
+            std::cout << "\e[1m=== evaluate operation #" << index << " ===\e[0m" << std::endl;
+        }
+
         const dim_t valueIndexCount = (operations[index].op == OperationType::NEG) ? 1:2;
         for (dim_t valueIndex = 0; valueIndex < valueIndexCount; ++valueIndex ) {
             if (operations[index].values[valueIndex].type == OperationValueType::OP) {
+                if (debug) std::cout << "  operations[" << operations[index].values[valueIndex].value.id << "]" << std::endl;
                 values[valueIndex] = operations[operations[index].values[valueIndex].value.id].result;
             } else {
-                values[valueIndex] = operations[index].values[valueIndex].eval(engine, w);
+                values[valueIndex] = operations[index].values[valueIndex].eval(engine, w, debug);
             }
-            // std::cout << "values[" << valueIndex << "]:" << Goldilocks::toString(values[valueIndex]) << std::endl;
+            if (debug) {
+                std::cout << "  values[" << valueIndex << "]:" << Goldilocks::toString(values[valueIndex]) << std::endl;
+            }
         }
 
         switch (operations[index].op) {
@@ -143,6 +151,8 @@ FrElement Expression::eval(Engine &engine, omega_t w)
                 throw std::runtime_error("Invalid Type");
                 // throw std::runtime_error(std::string("Invalid Operation Type ") + std::string(operations[index].op) + std::string(" on expression ") + std::string(id));
         }
+        if (debug) std::cout << " OP[" << index << "]: " << Goldilocks::toString( operations[index].result) << std::endl;
+
         // std::cout << "result:" << Goldilocks::toString(operations[index].result) << std::endl;
     }
     return operations[0].result;
