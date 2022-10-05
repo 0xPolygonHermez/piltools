@@ -11,6 +11,7 @@
 #include <string>
 #include <sys/mman.h>
 #include <errno.h>
+#include "omp.h"
 #include <goldilocks_base_field.hpp>
 #include "engine.hpp"
 
@@ -18,10 +19,23 @@
 using json = nlohmann::json;
 
 
+/*
+// /home/ubuntu//zkevm-proverjs/build/v0.4.0.0-rc.1-basic/zkevm.expr
+const std::string basePath = "/home/ubuntu/zkevm-proverjs/build/v0.4.0.0-rc.1-basic/";
+const std::string pilJsonFilename = basePath + "basic_main.pil.json";
+const std::string constFilename = basePath + "zkevm.const";
+const std::string commitFilename = basePath + "zkevm.commit";
+*/
+
+const std::string basePath = "/home/ubuntu/zkevm-proverjs/build/v0.3.0.0-rc.1/";
+const std::string pilJsonFilename = basePath + "main.pil.json";
+const std::string constFilename = basePath + "zkevm.const";
+const std::string commitFilename = basePath + "zkevm.commit";
+/*
 const std::string pilJsonFilename = "../../data/v0.3.0.0-rc.1/main.pil.json";
 const std::string constFilename = "../../data/v0.3.0.0-rc.1/zkevm.const";
 const std::string commitFilename = "../../data/v0.3.0.0-rc.1/zkevm.commit";
-/*
+
 const std::string pilJsonFilename = "../../data/v0.4.0.0-rc.1-basic/basic_main.pil.json";
 const std::string constFilename = "../../data/v0.4.0.0-rc.1-basic/zkevm.const";
 const std::string commitFilename = "../../data/v0.4.0.0-rc.1-basic/zkevm.commit";

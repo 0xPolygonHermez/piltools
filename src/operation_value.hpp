@@ -19,6 +19,7 @@ enum class OperationValueType { NONE, CM, CONST, EXP, NUMBER, PUBLIC, OP };
 class OperationValue
 {
     public:
+        static const uint DEP_NONE = 0x7FFFFFFF;
         static const char *typeLabels[];
 
         OperationValueType type;
@@ -29,7 +30,8 @@ class OperationValue
             FrElement f;
         } value;
         uid_t set(OperationValueType vType, nlohmann::json& node);
-        FrElement eval(Engine &engine, omega_t w = 0, bool debug = false);
+        bool isNextExpression (void) { return next > 0 && type == OperationValueType::EXP; };
+        FrElement eval(Engine &engine, omega_t w, uid_t evalGroupId, bool debug = false);
         OperationValue ( void ) { type = OperationValueType::NONE; value.u64 = 0; next = 0; };
 };
 

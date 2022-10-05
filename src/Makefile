@@ -5,8 +5,17 @@ CC = g++
 #  -g     - this flag adds debugging information to the executable file
 #  -Wall  - this flag is used to turn on most compiler warnings
 # CFLAGS  = -g -O2 -H  -Wall -fsanitize=leak -std=c++11 -Wno-unknown-pragmas -I goldilocks/src/
-CFLAGS  = -g -O2 -Wall -std=c++17 -Wno-unknown-pragmas -I goldilocks/src/
-LDFLAGS  = -lgmp
+
+LIBOMP := $(shell find /usr/lib/llvm-* -name "libomp.so" | sed 's/libomp.so//')
+ifndef LIBOMP
+$(error LIBOMP is not set, you need to install libomp-dev)
+endif
+
+#CXX := mpiCC
+#LDFLAGS := -lpthread -lgmp -lstdc++ -lomp -lgmpxx -lbenchmark -L$(LIBOMP) -Wno-unknown-pragmas
+
+CFLAGS  = -g -O3 -Wall -std=c++17 -I goldilocks/src -pthread -fopenmp
+LDFLAGS  = -lpthread -lgmp -lgmpxx -lomp -L$(LIBOMP)
 
 # The build target
 TARGET = ../build/main

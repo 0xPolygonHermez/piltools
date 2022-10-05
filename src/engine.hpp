@@ -40,7 +40,7 @@ class Engine {
         const FrElement getConst(uid_t id, omega_t w = 0) { return constPols[(uint64_t) w * nConstants + id]; };
         const FrElement getCommited(uid_t id, omega_t w = 0) { return cmPols[(uint64_t)w * nCommitments + id]; };
         const FrElement getPublic(uid_t id, omega_t w = 0) { return publics.getValue(id); };
-        const FrElement getExpression(uid_t id, omega_t w = 0) { return expressions.getEvaluation(id, w); };
+        const FrElement getExpression(uid_t id, omega_t w, uid_t evalGroupId) { return expressions.getEvaluation(id, w, evalGroupId); };
         const std::string &getConstName(uid_t id) { return constRefs.getName(id); };
         const std::string &getCommitedName(uid_t id) { return cmRefs.getName(id); };
         const std::string &getPublicName(uid_t id) { return publics.getName(id); };

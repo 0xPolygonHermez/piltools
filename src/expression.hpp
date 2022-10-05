@@ -14,22 +14,25 @@ namespace pil {
         public:
 
             uid_t id;
+            uid_t groupId;
             std::string name;
             dim_t next;
+            bool nextExpression;
 
             std::vector<Operation> operations;
             Dependencies dependencies;
             // Expressions *parent;
             bool alias;
             bool compiled;
+            bool isZero;
+            bool evaluated;
             FrElement *aliasEvaluations;
-
-            FrElement getEvaluation(omega_t w) const;
 
             Expression (void);
             bool compile (nlohmann::json &node);
             void dump (void) const;
             FrElement eval (Engine &engine, omega_t w = 0, bool debug = false);
+            FrElement getAliasEvaluation (Engine &engine, omega_t w, uid_t evalGroupId, bool debug = false);
             OperationValueType getAliasType ( void ) const;
             FrElement getAliasValue ( void ) const;
             uint64_t getAliasValueU64 ( void ) const;

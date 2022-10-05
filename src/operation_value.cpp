@@ -17,16 +17,19 @@ uid_t OperationValue::set(OperationValueType vType, nlohmann::json& node)
     }
     if (type == OperationValueType::NUMBER) {
         std::string svalue = node["value"];
-        value.f = Goldilocks::fromU64(strtoull(svalue.c_str(), NULL, 10));
+        uint base = 10;
+        if (svalue.substr(0, 2) == "0x") {
+            svalue = svalue.substr(2);
+            base = 16;
+        }
+        value.f = Goldilocks::fromString(svalue, base);
     }
-    /* if (type == PilExpressionOperationValueType::OP) {
-        value.u64 = node["id"];
-    )*/
     next = (node.contains("next") && node["next"]);
-    return (type == OperationValueType::EXP) ? value.id : 0;
+    return (type == OperationValueType::EXP) ? value.id : DEP_NONE;
 }
 
-FrElement OperationValue::eval(Engine &engine, omega_t w, bool debug)
+
+FrElement OperationValue::eval(Engine &engine, omega_t w, uid_t evalGroupId, bool debug)
 {
     w = engine.next(w + next);
     switch(type) {
@@ -44,7 +47,7 @@ FrElement OperationValue::eval(Engine &engine, omega_t w, bool debug)
         }
         case OperationValueType::EXP: {
             if (debug) std::cout << "  getExpression (" << value.id << "," << w << ")" << std::endl;
-            return engine.getExpression(value.id, w);
+            return engine.getExpression(value.id, w, evalGroupId);
         }
         case OperationValueType::NUMBER: {
             if (debug) std::cout << "  number " << Goldilocks::toU64(value.f) << std::endl;

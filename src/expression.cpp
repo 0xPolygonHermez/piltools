@@ -11,30 +11,39 @@ Expression::Expression (void)
 {
     alias = false;
     compiled = false;
+    evaluated = false;
     id = 0;
     next = 0;
     aliasEvaluations = NULL;
+    isZero = true;
+    nextExpression = false;
 }
 
-OperationValueType Expression::getAliasType ( void ) const
+OperationValueType Expression::getAliasType (void) const
 {
     if (!alias) return OperationValueType::NONE;
     return operations[0].values[0].type;
 }
 
-FrElement Expression::getAliasValue ( void ) const
+FrElement Expression::getAliasEvaluation (Engine &engine, omega_t w, uid_t evalGroupId, bool debug)
 {
-    if (!alias) return Goldilocks::zero();
+    assert(alias);
+    return operations[0].values[0].eval(engine, w, groupId, debug);
+}
+
+FrElement Expression::getAliasValue (void) const
+{
+    assert(alias);
     return operations[0].values[0].value.f;
 }
 
-uint64_t Expression::getAliasValueU64 ( void ) const
+uint64_t Expression::getAliasValueU64 (void) const
 {
-    if (!alias) return 0;
+    assert(alias);
     return operations[0].values[0].value.u64;
 }
 
-bool Expression::compile(nlohmann::json &node)
+bool Expression::compile (nlohmann::json &node)
 {
     if (compiled) return false;
 
@@ -53,7 +62,7 @@ bool Expression::compile(nlohmann::json &node)
         std::cout << "ALIAS: " << vType << node << std::endl;
 
         const uid_t dependency = operations[0].values[0].set(vType, node);
-        if (dependency) {
+        if (dependency != OperationValue::DEP_NONE) {
             dependencies.add(dependency);
         }
         if (next) std::cout << "NEXT ALIAS FOUND" << std::endl;
@@ -74,6 +83,11 @@ void Expression::recursiveCompile(nlohmann::json& node, dim_t destination, Opera
     for (int valueIndex = 0; valueIndex < valueCount; ++valueIndex) {
         auto nvalue = node["values"][valueIndex];
         Operation::decodeType(nvalue["op"], opType, vType);
+
+        #ifdef __DEBUG__
+        std::cout << "valueIndex:" << valueIndex << " op:" << nvalue["op"] << " opType:" << opType << " vType:" << vType << std::endl;
+        #endif
+
         if (opType != OperationType::NONE) {
             int valueDestination = getFreeId();
             operations[destination].values[valueIndex].type = OperationValueType::OP;
@@ -82,8 +96,14 @@ void Expression::recursiveCompile(nlohmann::json& node, dim_t destination, Opera
             continue;
         }
         const uint64_t dependency = operations[destination].values[valueIndex].set(vType, nvalue);
-        if (dependency) {
+        if (dependency != OperationValue::DEP_NONE) {
+            #ifdef __DEBUG__
+            std::cout << "valueIndex:" << valueIndex << " dependency:" << dependency << " id:" << id << " vType:" << vType << std::endl;
+            #endif
             dependencies.add(dependency);
+        }
+        if (operations[destination].values[valueIndex].isNextExpression()) {
+            nextExpression = true;
         }
     }
 }
@@ -91,7 +111,7 @@ void Expression::recursiveCompile(nlohmann::json& node, dim_t destination, Opera
 void Expression::dump(void) const
 {
     for (uint index = 0; index < operations.size(); ++index) {
-        printf("%2u|%02X|%-6s(%d)|%-6s(%d)|0x%016lX|%-6s(%d)|0x%016lX|0x%016lX\n", index, index, Operation::typeLabels[(int)operations[index].op], (int)operations[index].op,
+        printf("%2lu|%02lX|%-6s(%d)|%-6s(%d)|0x%016lX|%-6s(%d)|0x%016lX|0x%016lX\n", (uint64_t)index, (uint64_t)index, Operation::typeLabels[(int)operations[index].op], (int)operations[index].op,
                 OperationValue::typeLabels[(int)operations[index].values[0].type], (int)operations[index].values[0].type, operations[index].values[0].value.u64,
                 OperationValue::typeLabels[(int)operations[index].values[1].type], (int)operations[index].values[1].type, operations[index].values[1].value.u64,
                 Goldilocks::toU64(operations[index].result));
@@ -108,25 +128,32 @@ dim_t Expression::getFreeId(void)
 
 FrElement Expression::eval(Engine &engine, omega_t w, bool debug)
 {
+    // TODO: REVIEW.
     if (alias) return Goldilocks::zero();
     for (int index = operations.size() - 1; index >= 0; --index) {
         FrElement values[2];
 
+        #ifdef __DEBUG__
         if (debug) {
             std::cout << "\e[1m=== evaluate operation #" << index << " ===\e[0m" << std::endl;
         }
+        #endif
 
         const dim_t valueIndexCount = (operations[index].op == OperationType::NEG) ? 1:2;
         for (dim_t valueIndex = 0; valueIndex < valueIndexCount; ++valueIndex ) {
             if (operations[index].values[valueIndex].type == OperationValueType::OP) {
+                #ifdef __DEBUG__
                 if (debug) std::cout << "  operations[" << operations[index].values[valueIndex].value.id << "]" << std::endl;
+                #endif
                 values[valueIndex] = operations[operations[index].values[valueIndex].value.id].result;
             } else {
-                values[valueIndex] = operations[index].values[valueIndex].eval(engine, w, debug);
+                values[valueIndex] = operations[index].values[valueIndex].eval(engine, w, groupId, debug);
             }
+            #ifdef __DEBUG__
             if (debug) {
                 std::cout << "  values[" << valueIndex << "]:" << Goldilocks::toString(values[valueIndex]) << std::endl;
             }
+            #endif
         }
 
         switch (operations[index].op) {
@@ -151,10 +178,13 @@ FrElement Expression::eval(Engine &engine, omega_t w, bool debug)
                 throw std::runtime_error("Invalid Type");
                 // throw std::runtime_error(std::string("Invalid Operation Type ") + std::string(operations[index].op) + std::string(" on expression ") + std::string(id));
         }
+        #ifdef __DEBUG__
         if (debug) std::cout << " OP[" << index << "]: " << Goldilocks::toString( operations[index].result) << std::endl;
+        #endif
 
         // std::cout << "result:" << Goldilocks::toString(operations[index].result) << std::endl;
     }
+    if (!Goldilocks::isZero(operations[0].result)) isZero = false;
     return operations[0].result;
     // dump();
 }
@@ -174,11 +204,6 @@ uint Expression::replaceOperationValue(OperationValueType oldValueType, uint64_t
         }
     }
     return count;
-}
-
-FrElement Expression::getEvaluation(omega_t w) const
-{
-    return Goldilocks::zero();
 }
 
 }

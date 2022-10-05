@@ -23,12 +23,13 @@ void *Engine::mapFile(const std::string &filename)
 {
     struct stat sb;
 
-    int fd = open(filename.c_str(), O_RDONLY|O_LARGEFILE);
+    int fd = open(filename.c_str(), O_RDONLY);
     if (fd < 0) {
         throw std::runtime_error("Error mapping file " + filename);
     }
 
     fstat(fd, &sb);
+    std::cout << "SIZE:" << sb.st_size;
     void *maddr = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     assert(maddr != MAP_FAILED);
     close(fd);
@@ -53,7 +54,7 @@ FrElement Engine::getEvaluation(const std::string &name, omega_t w, index_t inde
 }
 
 Engine::Engine(const std::string &pilJsonFilename, const std::string &constFilename, const std::string &commitFilename)
-    :constRefs(ReferenceType::constP), cmRefs(ReferenceType::cmP), imRefs(ReferenceType::imP)
+    :constRefs(ReferenceType::constP), cmRefs(ReferenceType::cmP), imRefs(ReferenceType::imP), expressions(*this)
 {
     n = 0;
     nCommitments = 0;
@@ -96,6 +97,7 @@ void Engine::loadReferences(nlohmann::json &pil)
         const dim_t polDeg = value["polDeg"];
         if (!n) {
             n = polDeg;
+            expressions.n = n;
         }
         const uid_t id = value["id"];
         bool isArray = value["isArray"];
@@ -274,28 +276,42 @@ void Engine::foundAllExpressions (nlohmann::json &pil)
     }
     */
     loadAndCompileExpressions(pil);
+    expressions.dumpExpression(351);
+    expressions.dumpExpression(383);
+    expressions.dumpExpression(415);
     // reduceNumberAliasExpressions();
+
     expressions.reduceAliasExpressions();
-    // expressions.calculateDependencies();
-    expressions.evalAll(*this);
-    /*
-    uint64_t *exprs = (uint64_t *)mapFile("../../data/v0.4.0.0-rc.1-basic/zkevm.expr");
-    for (uint w = 0; w < n; ++w) {
+    #ifdef __DEBUG__
+    expressions.dumpDependencies();
+    #endif
+    expressions.calculateGroup();
+    expressions.evalAll();
+
+    // uint64_t *exprs = (uint64_t *)mapFile("../../data/v0.4.0.0-rc.1-basic/zkevm.expr");
+    // uint64_t *exprs = (uint64_t *)mapFile("/home/ubuntu/zkevm-proverjs/build/v0.4.0.0-rc.1-basic/zkevm.expr");
+    uint64_t *exprs = (uint64_t *)mapFile("/home/ubuntu/zkevm-proverjs/build/v0.3.0.0-rc.1/zkevm.expr");
+
+    uint differences = 0;
+    for (uint w = 0; w < n && differences < 5000; ++w) {
         if (w && (w % 1000 == 0)) std::cout << "w:" << w << std::endl;
-        for (uint index = 0; index < 90; ++index) {
-            const uint64_t evaluation = Goldilocks::toU64(expressions.getEvaluation(index, w));
-            const uint64_t _evaluation = exprs[index + 90 * w];
+        for (uint index = 0; index < expressions.count && differences < 5000; ++index) {
+            const uint64_t evaluation = Goldilocks::toU64(expressions.getEvaluation(index, w, Expressions::GROUP_NONE));
+            const uint64_t _evaluation = exprs[index + expressions.count * w];
             if (evaluation != _evaluation) {
-                std::cout << "w:" << w << " [" << index << "/" << w << "]" << _evaluation << " " << evaluation << std::endl;
+                ++differences;
+                std::cout << "w:" << w << " [" << index << "/" << w << "=" << (index + expressions.count * w) << "] "  << _evaluation << " " << evaluation << std::endl;
             }
         }
     }
+    /*
     std::cout << "EXPR67" << pil["expressions"][67] << std::endl;
     expressions.dumpExpression(67);
     expressions.debugEval(*this, 67, 0);
     expressions.dumpExpression(67);
     std::cout << "EXPR84" << pil["expressions"][84] << std::endl;
     expressions.dumpExpression(84);
+
     */
     std::cout << "expressions:" << nExpressions << " referenced:" << eids.size() /* << " alias:" << aliasCount
               << " aliasNextCount:" << aliasNextCount*/ << " dependencies:" << expressions.dependencies.size() << "\n";
@@ -305,15 +321,9 @@ void Engine::foundAllExpressions (nlohmann::json &pil)
 void Engine::checkConnectionIdentities (nlohmann::json &pil)
 {
     foundAllExpressions(pil);
-    return;
+//    return;
 
-    auto pilExpressions = pil["expressions"];
-    uid_t id = 0;
-    std::cout << pilExpressions[1157] << std::endl;
-    std::cout << "expressions: " << pilExpressions.size() << std::endl;
-    // compileExpressions(pil);
-    return;
-
+/*
     for (nlohmann::json::iterator it = pilExpressions.begin(); it != pilExpressions.end(); ++it) {
         if (it->contains("id")) {
             std::cout << "#### " << id << " ID: " << (*it)["id"] << std::endl;
@@ -337,6 +347,20 @@ void Engine::checkConnectionIdentities (nlohmann::json &pil)
         for (nlohmann::json::iterator cit = connections.begin(); cit != connections.end(); ++cit) {
             std::cout << "connections " << (*cit) << std::endl;
         }
+    } */
+    auto polIdentities = pil["polIdentities"];
+    for (auto it = polIdentities.begin(); it != polIdentities.end(); ++it) {
+        const uid_t eid = (*it)["e"];
+        std::cout << "identity " << eid << " " << expressions.isZero(eid) << std::endl;
+/*        for (nlohmann::json::iterator pit = pols.begin(); pit != pols.end(); ++pit) {
+            std::cout << "pols " << (*pit) << std::endl;
+            uid_t exprId = *pit;
+            calculateExpression(exprId);
+        }
+        auto connections = (*it)["connections"];
+        for (nlohmann::json::iterator cit = connections.begin(); cit != connections.end(); ++cit) {
+            std::cout << "connections " << (*cit) << std::endl;
+        }*/
     }
 }
 
