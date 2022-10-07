@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <string>
 #include <list>
 #include <algorithm>
 #include "omp.h"
@@ -11,6 +12,7 @@
 #include "operation_value.hpp"
 #include "operation.hpp"
 #include "engine.hpp"
+#include "fr_element.hpp"
 #include "types.hpp"
 
 namespace pil {
@@ -66,21 +68,32 @@ uint Expressions::reduceNumberAliasExpressions (void)
 
 void Expressions::calculateDependencies (void)
 {
-    for (uint index = 0; index < count; ++index) {
+/*    for (uint index = 0; index < count; ++index) {
         recursiveCalculateDependencies(index);
     }
-    std::cout << dependencies.size() << " " << count << std::endl;
+    std::cout << dependencies.size() << " " << count << std::endl;*/
 }
 
 void Expressions::recursiveCalculateDependencies (uid_t expressionId)
 {
-    if (dependencies.contains(expressionId)) return;
+/*    if (dependencies.contains(expressionId)) return;
     Expression &expression = expressions[expressionId];
 
     for (uint index = 0; index < expression.dependencies.size(); ++index) {
         recursiveCalculateDependencies(expression.dependencies[index]);
     }
-    dependencies.add(expressionId);
+    dependencies.add(expressionId);*/
+}
+
+std::string Expressions::valuesToString(uid_t *values, dim_t size, omega_t w)
+{
+    FrElement elements[size];
+    std::string result;
+    for (dim_t index = 0; index < size; ++index) {
+        elements[index] = getEvaluation(values[index], w);
+    }
+    result.append((const char *)elements, sizeof(FrElement));
+    return result;
 }
 
 FrElement Expressions::getEvaluation(uid_t id, omega_t w, uid_t evalGroupId)
@@ -195,7 +208,23 @@ void Expressions::evalAll(void)
     std::cout << "time(ms):" <<  (endT - startT) << std::endl;
 }
 
-void Expressions::evalAllCpuGroup(uid_t icpu)
+void Expressions::afterEvaluationsLoaded (void)
+{
+    #pragma omp parallel for
+    for (uid_t iexpr = 0; iexpr < count; ++iexpr) {
+        if (isAlias(iexpr)) continue;
+        bool expressionIsZero = true;
+        expressions[iexpr].setEvaluatedFlag(true);
+        for (omega_t w = 0; w < n; ++w) {
+            if (Goldilocks::isZero(getEvaluation(iexpr, w))) continue;
+            expressionIsZero = false;
+            break;
+        }
+        expressions[iexpr].setIsZeroFlag(expressionIsZero);
+    }
+}
+
+void Expressions::evalAllCpuGroup (uid_t icpu)
 {
     dim_t depCount = dependencies.size();
     for (int idep = 0; idep < depCount; ++idep) {
@@ -222,14 +251,21 @@ Expressions::Expressions (Engine &engine)
 {
     evaluations = NULL;
     expressions = NULL;
+    externalEvaluations = false;
     cpus = 64;
     cpuGroups = new std::list<uid_t>[cpus];
 }
 
 Expressions::~Expressions (void)
 {
-    if (evaluations) delete [] evaluations;
+    if (!externalEvaluations && evaluations) delete [] evaluations;
     if (expressions) delete [] expressions;
+}
+
+void Expressions::setEvaluations ( FrElement *data )
+{
+    evaluations = data;
+    externalEvaluations = true;
 }
 
 void Expressions::resetGroups ( void )

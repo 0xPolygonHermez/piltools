@@ -25,11 +25,12 @@ class Expressions {
         dim_t n;
         uint count = 0;
         Engine &engine;
+        bool externalEvaluations;
 
         const Reference *add (const std::string &name, const Reference &value);
         const Reference *get (uint id) { return values + id; };
         void map (void *data) { evaluations = (FrElement *)data; }
-        FrElement getEvaluation (uid_t id, omega_t w, uid_t evalGroupId);
+        FrElement getEvaluation (uid_t id, omega_t w, uid_t evalGroupId = GROUP_NONE);
         const std::string &getName (uint id) { return values[id].name; }
         void calculateDependencies (void);
         void recursiveCalculateDependencies (uid_t expressionId);
@@ -41,11 +42,16 @@ class Expressions {
         void evalAllCpuGroup(uid_t icpu);
         void debugEval (uid_t expressionId, omega_t w = 0);
         void dumpExpression (uid_t expressionId) { expressions[expressionId].dump(); };
+        bool isAlias (uid_t expressionId) { return expressions[expressionId].isAlias(); };
         void dumpDependencies ( void );
         void calculateGroup (void);
         Expressions (Engine &engine);
         ~Expressions ( void );
         bool isZero(uid_t id);
+        std::string valuesToString(uid_t *values, dim_t size, omega_t w);
+        void setEvaluations(FrElement *evaluations);
+        dim_t getEvaluationsSize (void) { return (uint64_t)count * (uint64_t)n * sizeof(FrElement); };
+        void afterEvaluationsLoaded (void);
     protected:
         Reference *values = NULL;
         FrElement *evaluations;

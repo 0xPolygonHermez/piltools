@@ -20,7 +20,7 @@ class References {
         const Reference *get(uid_t id);
         void map(void *data);
         FrElement getEvaluation(uid_t id, omega_t w, index_t index = 0);
-        const std::string &getName(uid_t id) const;
+        std::string getName(uid_t id) const;
         References (ReferenceType type);
         ~References (void);
     protected:

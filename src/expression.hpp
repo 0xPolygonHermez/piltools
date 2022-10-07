@@ -38,6 +38,8 @@ namespace pil {
             uint64_t getAliasValueU64 ( void ) const;
             bool isAlias ( void ) const { return alias; };
             uint replaceOperationValue(OperationValueType oldValueType, uint64_t oldValue, OperationValueType newValueType, uint64_t newValue);
+            void setIsZeroFlag ( bool value ) { isZero = value; };
+            void setEvaluatedFlag ( bool value ) { evaluated = value; };
         protected:
             void recursiveCompile (nlohmann::json& node, dim_t destination, OperationType opType);
             dim_t getFreeId (void);

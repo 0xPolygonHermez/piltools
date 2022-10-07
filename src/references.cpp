@@ -47,7 +47,7 @@ FrElement References::getEvaluation(uid_t id, omega_t w, index_t index)
     return evaluations[offset];
 }
 
-const std::string &References::getName(uid_t id) const
+std::string References::getName(uid_t id) const
 {
     return values.at(id)->getName();
 }

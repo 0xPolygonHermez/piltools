@@ -4,36 +4,91 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <string.h>
+#include <errno.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <sys/mman.h>
-#include <errno.h>
 #include <list>
 #include <map>
 #include <set>
+#include <unordered_set>
 #include "engine.hpp"
 #include "expression.hpp"
 #include "reference.hpp"
 
 namespace pil {
 
-void *Engine::mapFile(const std::string &filename)
+Engine::Engine(EngineOptions options)
+    :constRefs(ReferenceType::constP), cmRefs(ReferenceType::cmP), imRefs(ReferenceType::imP), expressions(*this), options(options)
 {
-    struct stat sb;
+    n = 0;
+    nCommitments = 0;
+    nConstants = 0;
 
-    int fd = open(filename.c_str(), O_RDONLY);
+    checkOptions();
+    loadJsonPil();
+    loadReferences();
+    loadConstantsFile();
+    loadCommitedFile();
+    loadPublics();
+
+    loadAndCompileExpressions();
+    calculateAllExpressions();
+
+    checkPolIdentities();
+    // checkConnectionIdentities();
+    std::cout << "done" << std::endl;
+}
+
+void *Engine::mapFile(const std::string &filename, dim_t size, bool wr )
+{
+
+    int fd;
+
+    if (wr) {
+        fd = open(filename.c_str(), O_RDWR|O_CREAT, 0666);
+        ftruncate(fd, size);
+    } else {
+        fd = open(filename.c_str(), O_RDONLY);
+    }
+
     if (fd < 0) {
         throw std::runtime_error("Error mapping file " + filename);
     }
 
-    fstat(fd, &sb);
-    std::cout << "SIZE:" << sb.st_size;
-    void *maddr = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    assert(maddr != MAP_FAILED);
+    if (!size) {
+        struct stat sb;
+        fstat(fd, &sb);
+        size = sb.st_size;
+    }
+
+    std::cout << "mapping file " << filename << " with " << size << " bytes" << std::endl;
+    void *maddr = mmap(NULL, size, wr ? PROT_WRITE:PROT_READ, MAP_PRIVATE, fd, 0);
     close(fd);
+    assert(maddr != MAP_FAILED);
+
+    mappings[maddr] = size;
     return maddr;
+}
+
+void Engine::unmap (void *addr)
+{
+    auto it = mappings.find(addr);
+    if (it != mappings.end()) {
+        munmap(addr, it->second);
+        mappings.erase(addr);
+    }
+}
+
+void Engine::unmapAll (void)
+{
+    for (auto it = mappings.begin(); it != mappings.end(); ++it) {
+        munmap(it->first, it->second);
+    }
+    mappings.clear();
 }
 
 FrElement Engine::getEvaluation(const std::string &name, omega_t w, index_t index )
@@ -53,28 +108,49 @@ FrElement Engine::getEvaluation(const std::string &name, omega_t w, index_t inde
     return evaluation;
 }
 
-Engine::Engine(const std::string &pilJsonFilename, const std::string &constFilename, const std::string &commitFilename)
-    :constRefs(ReferenceType::constP), cmRefs(ReferenceType::cmP), imRefs(ReferenceType::imP), expressions(*this)
+
+void Engine::calculateAllExpressions (void)
 {
-    n = 0;
-    nCommitments = 0;
-    nConstants = 0;
-    std::ifstream pilFile(pilJsonFilename);
-    nlohmann::json pil = nlohmann::json::parse(pilFile);
-    loadReferences(pil);
-    std::cout << "mapping constant file " << constFilename << std::endl;
-    constPols = (FrElement *)mapFile(constFilename);
-    constRefs.map(constPols);
-    std::cout << "mapping commited file " << commitFilename << std::endl;
-    std::cout << "sizeof(FrElement): " << sizeof(FrElement) << "\n";
-    cmPols = (FrElement *)mapFile(commitFilename);
-    cmRefs.map(cmPols);
-    loadPublics(pil);
-    checkConnectionIdentities(pil);
-    std::cout << "done" << std::endl;
+    expressions.calculateGroup();
+    if (options.loadExpressions || options.saveExpressions) {
+        mapExpressionsFile(options.saveExpressions);
+    }
+
+    if (options.loadExpressions) {
+        expressions.afterEvaluationsLoaded();
+    } else {
+        expressions.evalAll();
+    }
+    // expressions.dumpExpression(351);
 }
 
-ReferenceType Engine::getReferenceType(const std::string &name, const std::string &type)
+void Engine::loadJsonPil (void)
+{
+    std::ifstream pilFile(options.pilJsonFilename);
+    pil = nlohmann::json::parse(pilFile);
+}
+
+void Engine::loadConstantsFile (void)
+{
+    std::cout << "mapping constant file " << options.constFilename << std::endl;
+    constPols = (FrElement *)mapFile(options.constFilename);
+    constRefs.map(constPols);
+}
+
+void Engine::loadCommitedFile (void)
+{
+    std::cout << "mapping commited file " << options.commitFilename << std::endl;
+    cmPols = (FrElement *)mapFile(options.commitFilename);
+    cmRefs.map(cmPols);
+}
+
+void Engine::mapExpressionsFile (bool wr)
+{
+    std::cout << "mapping constant file " << options.expressionsFilename << std::endl;
+    expressions.setEvaluations((FrElement *)mapFile(options.expressionsFilename, expressions.getEvaluationsSize(), wr));
+}
+
+ReferenceType Engine::getReferenceType (const std::string &name, const std::string &type)
 {
     if (type == "cmP") return ReferenceType::cmP;
     if (type == "constP") return ReferenceType::constP;
@@ -82,7 +158,7 @@ ReferenceType Engine::getReferenceType(const std::string &name, const std::strin
     throw std::runtime_error("Reference " + name + " has invalid type '" + type + "'");
 }
 
-void Engine::loadReferences(nlohmann::json &pil)
+void Engine::loadReferences (void)
 {
     for (nlohmann::json::iterator it = pil.begin(); it != pil.end(); ++it) {
         std::cout << it.key() << "\n";
@@ -141,7 +217,7 @@ void Engine::loadReferences(nlohmann::json &pil)
     std::cout << "expressions:" << pil["expressions"].size() << std::endl;
 }
 
-void Engine::loadPublics(nlohmann::json &pil)
+void Engine::loadPublics (void)
 {
     auto pilPublics = pil["publics"];
     for (nlohmann::json::iterator it = pilPublics.begin(); it != pilPublics.end(); ++it) {
@@ -168,129 +244,98 @@ void Engine::loadPublics(nlohmann::json &pil)
     }
 }
 
-void Engine::loadAndCompileExpressions(nlohmann::json &pil)
+void Engine::loadAndCompileExpressions (void)
 {
     expressions.loadAndCompile(pil["expressions"]);
+    expressions.reduceAliasExpressions();
+    #ifdef __DEBUG__
+    expressions.dumpDependencies();
+    #endif
+    // reduceNumberAliasExpressions();
 }
 
-void Engine::foundAllExpressions (nlohmann::json &pil)
+void Engine::checkConnectionIdentities (void)
 {
-    std::set<uid_t> eids;
-    std::cout << "SET " << &eids << std::endl;
-
     std::cout << "connectionIdentities ....." << std::endl;
     auto connectionIdentities = pil["connectionIdentities"];
     for (auto it = connectionIdentities.begin(); it != connectionIdentities.end(); ++it) {
         for (auto ipols = (*it)["pols"].begin(); ipols != (*it)["pols"].end(); ++ipols) {
             uid_t id = *ipols;
-            std::cout << "adding pols expression: " << id << std::endl;
-            eids.insert(id);
         }
         for (auto iconnections = (*it)["connections"].begin(); iconnections != (*it)["connections"].end(); ++iconnections) {
             uid_t id = *iconnections;
-            std::cout << "adding connections expression: " << id << std::endl;
-            eids.insert(id);
         }
     }
+}
 
+void Engine::checkPlookupIdentities (void)
+{
     std::cout << "plookupIdentities ....." << std::endl;
     auto plookupIdentities = pil["plookupIdentities"];
     for (auto it = plookupIdentities.begin(); it != plookupIdentities.end(); ++it) {
-        for (auto t = (*it)["t"].begin(); t != (*it)["t"].end(); ++t) {
-            uid_t id = *t;
-            std::cout << "adding t expression: " << id << std::endl;
-            eids.insert(id);
+        std::cout << *it << std::endl;
+        uid_t selT = (*it)["selT"];
+        uid_t selF = (*it)["selF"];
+        dim_t tCount = (*it)["t"].size();
+        dim_t fCount = (*it)["f"].size();
+        uid_t ts[tCount];
+        uid_t fs[fCount];
+
+        for (uid_t index = 0; index < tCount; ++index) {
+            ts[index] = (*it)["t"][index];
         }
-        for (auto selT = (*it)["selT"].begin(); selT != (*it)["selT"].end(); ++selT) {
-            uid_t id = *selT;
-            std::cout << "adding selT expression: " << id << std::endl;
-            eids.insert(id);
-        }
-        for (auto f = (*it)["f"].begin(); f != (*it)["f"].end(); ++f) {
-            uid_t id = *f;
-            std::cout << "adding f expression: " << id << std::endl;
-            eids.insert(id);
-        }
-        for (auto selF = (*it)["selF"].begin(); selF != (*it)["selF"].end(); ++selF) {
-            uid_t id = *selF;
-            std::cout << "adding selF expression: " << id << std::endl;
-            eids.insert(id);
+
+        std::unordered_multiset<std::string> tt;
+
+        for (omega_t w = 0; w < n; ++w) {
+            if (Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
+            tt.insert(expressions.valuesToString(ts, tCount, w));
         }
     }
+}
 
+void Engine::checkPermutationIdentities (void)
+{
     std::cout << "permutationIdentities ....." << std::endl;
     auto permutationIdentities = pil["permutationIdentities"];
     for (auto it = permutationIdentities.begin(); it != permutationIdentities.end(); ++it) {
         for (auto t = (*it)["t"].begin(); t != (*it)["t"].end(); ++t) {
             uid_t id = *t;
             std::cout << "adding t expression: " << id << std::endl;
-            eids.insert(id);
         }
         for (auto selT = (*it)["selT"].begin(); selT != (*it)["selT"].end(); ++selT) {
             uid_t id = *selT;
             std::cout << "adding selT expression: " << id << std::endl;
-            eids.insert(id);
         }
         for (auto f = (*it)["f"].begin(); f != (*it)["f"].end(); ++f) {
             uid_t id = *f;
             std::cout << "adding f expression: " << id << std::endl;
-            eids.insert(id);
         }
         for (auto selF = (*it)["selF"].begin(); selF != (*it)["selF"].end(); ++selF) {
             uid_t id = *selF;
             std::cout << "adding selF expression: " << id << std::endl;
-            eids.insert(id);
         }
     }
+}
 
+void Engine::checkPolIdentities (void)
+{
     std::cout << "polIdentities ....." << std::endl;
     auto polIdentities = pil["polIdentities"];
     for (auto it = polIdentities.begin(); it != polIdentities.end(); ++it) {
-        uid_t id = (*it)["e"];
-        std::cout << "adding identity expression: " << id << std::endl;
-        eids.insert(id);
+        const uid_t eid = (*it)["e"];
+        std::cout << "identity " << eid << " " << expressions.isZero(eid) << std::endl;
     }
+}
 
+void Engine::verifyExpressionsWithFile (const std::string &filename)
+{
     /*
-    auto pilExpressions = pil["expressions"];
-    Dependencies dependencies;
-    const dim_t exprsCount = pilExpressions.size();
-    Expression *exprs = new Expression[exprsCount];
-
-    std::cout << "pilExpressions.size():" << pilExpressions.size() << std::endl;
-
-    uid_t index = 0;
-    dim_t aliasCount = 0;
-    dim_t aliasNextCount = 0;
-    for (auto it = pilExpressions.begin(); it != pilExpressions.end(); ++it) {
-        std::cout << "========== compiling " << index << "[" << eids.count(index) << "] ==========" << std::endl;
-        exprs[index].compile(*it);
-        // exprs[id].dump();
-        if (exprs[index].alias) ++aliasCount;
-        if (exprs[index].next) ++aliasNextCount;
-        ++index;
-    }
-
-    for (auto index = 0; index < exprsCount; ++index) {
-        exprs[index].getDependencies(dependencies);
-    }
+       ../../data/v0.4.0.0-rc.1-basic/zkevm.expr
+       /home/ubuntu/zkevm-proverjs/build/v0.4.0.0-rc.1-basic/zkevm.expr
+       /home/ubuntu/zkevm-proverjs/build/v0.3.0.0-rc.1/zkevm.expr
     */
-    loadAndCompileExpressions(pil);
-    expressions.dumpExpression(351);
-    expressions.dumpExpression(383);
-    expressions.dumpExpression(415);
-    // reduceNumberAliasExpressions();
-
-    expressions.reduceAliasExpressions();
-    #ifdef __DEBUG__
-    expressions.dumpDependencies();
-    #endif
-    expressions.calculateGroup();
-    expressions.evalAll();
-
-    // uint64_t *exprs = (uint64_t *)mapFile("../../data/v0.4.0.0-rc.1-basic/zkevm.expr");
-    // uint64_t *exprs = (uint64_t *)mapFile("/home/ubuntu/zkevm-proverjs/build/v0.4.0.0-rc.1-basic/zkevm.expr");
-    uint64_t *exprs = (uint64_t *)mapFile("/home/ubuntu/zkevm-proverjs/build/v0.3.0.0-rc.1/zkevm.expr");
+    uint64_t *exprs = (uint64_t *)mapFile(filename);
 
     uint differences = 0;
     for (uint w = 0; w < n && differences < 5000; ++w) {
@@ -304,74 +349,72 @@ void Engine::foundAllExpressions (nlohmann::json &pil)
             }
         }
     }
-    /*
-    std::cout << "EXPR67" << pil["expressions"][67] << std::endl;
-    expressions.dumpExpression(67);
-    expressions.debugEval(*this, 67, 0);
-    expressions.dumpExpression(67);
-    std::cout << "EXPR84" << pil["expressions"][84] << std::endl;
-    expressions.dumpExpression(84);
 
-    */
-    std::cout << "expressions:" << nExpressions << " referenced:" << eids.size() /* << " alias:" << aliasCount
-              << " aliasNextCount:" << aliasNextCount*/ << " dependencies:" << expressions.dependencies.size() << "\n";
-
-}
-
-void Engine::checkConnectionIdentities (nlohmann::json &pil)
-{
-    foundAllExpressions(pil);
-//    return;
-
-/*
-    for (nlohmann::json::iterator it = pilExpressions.begin(); it != pilExpressions.end(); ++it) {
-        if (it->contains("id")) {
-            std::cout << "#### " << id << " ID: " << (*it)["id"] << std::endl;
-        } else if (it->contains("idQ")) {
-            std::cout << "#### " << id << " IQD: " << (*it)["idQ"] << std::endl;
-        } else {
-            std::cout << "#### " << id << " NOTHING: " << *it << std::endl;
-        }
-        ++id;
-    }
-
-    auto pilConnectionIdentities = pil["connectionIdentities"];
-    for (nlohmann::json::iterator it = pilConnectionIdentities.begin(); it != pilConnectionIdentities.end(); ++it) {
-        auto pols = (*it)["pols"];
-        for (nlohmann::json::iterator pit = pols.begin(); pit != pols.end(); ++pit) {
-            std::cout << "pols " << (*pit) << std::endl;
-            uid_t exprId = *pit;
-            calculateExpression(exprId);
-        }
-        auto connections = (*it)["connections"];
-        for (nlohmann::json::iterator cit = connections.begin(); cit != connections.end(); ++cit) {
-            std::cout << "connections " << (*cit) << std::endl;
-        }
-    } */
-    auto polIdentities = pil["polIdentities"];
-    for (auto it = polIdentities.begin(); it != polIdentities.end(); ++it) {
-        const uid_t eid = (*it)["e"];
-        std::cout << "identity " << eid << " " << expressions.isZero(eid) << std::endl;
-/*        for (nlohmann::json::iterator pit = pols.begin(); pit != pols.end(); ++pit) {
-            std::cout << "pols " << (*pit) << std::endl;
-            uid_t exprId = *pit;
-            calculateExpression(exprId);
-        }
-        auto connections = (*it)["connections"];
-        for (nlohmann::json::iterator cit = connections.begin(); cit != connections.end(); ++cit) {
-            std::cout << "connections " << (*cit) << std::endl;
-        }*/
-    }
-}
-
-const FrElement Engine::calculateExpression(uid_t id)
-{
-    std::cout << "calculateExpression: " << id << std::endl;
-    return Goldilocks::zero();
 }
 
 Engine::~Engine (void)
 {
+    unmapAll();
+}
+
+void Engine::checkOptions (void)
+{
+    uint errorCount = 0;
+
+    if (options.pilJsonFilename.empty()) {
+        ++errorCount;
+        std::cerr << "required pilJsonFilename not specified" << std::endl;
+    } else {
+        if (!checkFilename(options.pilJsonFilename)) ++errorCount;
+    }
+
+    if (options.constFilename.empty()) {
+        ++errorCount;
+        std::cerr << "required constFilename not specified" << std::endl;
+    } else {
+        if (!checkFilename(options.constFilename)) ++errorCount;
+    }
+
+    if (options.commitFilename.empty()) {
+        ++errorCount;
+        std::cerr << "required commitFilename not specified" << std::endl;
+    } else {
+        if (!checkFilename(options.commitFilename)) ++errorCount;
+    }
+
+    if (options.loadExpressions && options.saveExpressions) {
+        ++errorCount;
+        std::cerr << "incompatible options loadExpressions and saveExpressions" << std::endl;
+    }
+
+    if (options.loadExpressions || options.saveExpressions) {
+        if (options.expressionsFilename.empty()) {
+            ++errorCount;
+            std::cerr << "expressionsFilename must be specified when loadExpressions or saveExpressions was true" << std::endl;
+        } else if (options.loadExpressions) {
+            if (!checkFilename(options.expressionsFilename)) ++errorCount;
+        }
+    }
+
+    if (errorCount > 0) {
+        std::cerr << "Found " << errorCount << " errors on options" << std::endl;
+        exit(1);
+    }
+}
+
+bool Engine::checkFilename (const std::string &filename, bool toWrite, bool exceptionOnFail)
+{
+    bool result = true;
+    if (access(filename.c_str(), toWrite ? (R_OK|W_OK) : (F_OK|R_OK)) != 0) {
+        int _errno = errno;
+        result = false;
+        std::string msg = "File "+filename+(toWrite ? " couldn't be used to write" : " not exists or not accesible");
+        std::string edesc = strerror(_errno);
+        msg += ". E:" + std::to_string(_errno)+" "+edesc;
+        if (exceptionOnFail) throw std::invalid_argument(msg);
+        std::cerr << msg << std::endl;
+    }
+    return result;
 }
 
 }
