@@ -130,6 +130,7 @@ dim_t Expression::getFreeId(void)
 FrElement Expression::eval(Engine &engine, omega_t w, bool debug)
 {
     // TODO: REVIEW.
+
     if (alias) return Goldilocks::zero();
     for (int index = operations.size() - 1; index >= 0; --index) {
         FrElement values[2];
@@ -185,7 +186,9 @@ FrElement Expression::eval(Engine &engine, omega_t w, bool debug)
 
         // std::cout << "result:" << Goldilocks::toString(operations[index].result) << std::endl;
     }
-    if (!Goldilocks::isZero(operations[0].result)) isZero = false;
+    if (isZero && !Goldilocks::isZero(operations[0].result)) {
+        isZero = false;
+    }
     return operations[0].result;
     // dump();
 }

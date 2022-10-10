@@ -62,8 +62,9 @@ int main ( int argc, char *argv [])
         pilJsonFilename: pilJsonFilename,
         constFilename: constFilename,
         commitFilename: commitFilename,
-        // loadExpressions: true,
-        // expressionsFilename: basePath + "zkevm.expr.eval.bin"
+        loadExpressions: true,
+//        saveExpressions: true,
+        expressionsFilename: basePath + "zkevm.expr.bypols.bin"
     });
     // engine.getEvaluation("Main.STEP", 10);
     // engine.getEvaluation("Arith.x1", 12, 3);

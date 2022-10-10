@@ -121,13 +121,14 @@ void Engine::calculateAllExpressions (void)
         expressions.afterEvaluationsLoaded();
     } else {
         expressions.evalAll();
-        const std::string verifyFilename = "/home/ubuntu/zkevm-proverjs/build/v0.4.0.0-rc.1/zkevm.expr.eval.bin";
-        if (!verifyExpressionsWithFile(verifyFilename)) {
-            std::cerr << "verification with file " << verifyFilename << " fails !!" << std::endl;
-            exit(1);
+        if (!options.expressionsVerifyFilename.empty()) {
+            if (!verifyExpressionsWithFile()) {
+                std::cerr << "verification with file " << options.expressionsVerifyFilename << " fails !!" << std::endl;
+                exit(1);
+            }
         }
+        expressions.afterEvaluationsLoaded();
     }
-    // expressions.dumpExpression(351);
 }
 
 void Engine::loadJsonPil (void)
@@ -301,7 +302,7 @@ void Engine::checkPlookupIdentities (void)
 
         for (omega_t w = 0; w < n; ++w) {
             if (hasSelT && Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
-            tt[identityIndex].insert(expressions.valuesToString(ts, tCount, w));
+            tt[identityIndex].insert(expressions.valuesToBinString(ts, tCount, w));
         }
         #pragma omp critical
         {
@@ -320,6 +321,7 @@ void Engine::checkPlookupIdentities (void)
     const uint64_t totaln = n * identitiesCount;
     for (dim_t identityIndex = 0; identityIndex < identitiesCount; ++identityIndex) {
         const std::string label = "plookup[" + std::to_string(identityIndex+1) + "/" + std::to_string(identitiesCount) + "] ";
+        const std::string location = (std::string)(identities[identityIndex]["fileName"]) + ":" + std::to_string((uint)(identities[identityIndex]["line"]));
         auto identity = identities[identityIndex];
         uint64_t done = 0;
         uint64_t lastdone = 0;
@@ -342,8 +344,8 @@ void Engine::checkPlookupIdentities (void)
             omega_t w2 = (ichunk == (chunks - 1)) ? n: w1 + wn;
             for (omega_t w = w1; w < w2; ++w) {
                 if (hasSelF && Goldilocks::isZero(expressions.getEvaluation(selF, w))) continue;
-                if (tt[identityIndex].count(expressions.valuesToString(fs, fCount, w)) == 0) {
-                    std::cerr << "problem on w:" << w << " " << std::endl;
+                if (tt[identityIndex].count(expressions.valuesToBinString(fs, fCount, w)) == 0) {
+                    std::cerr << "problem on plookup #" << identityIndex << " " << location << " w:" << w << " not found " << expressions.valuesToString(fs, fCount, w) << std::endl;
                 }
             }
             #pragma omp critical
@@ -394,7 +396,7 @@ void Engine::checkPermutationIdentities (void)
         for (omega_t w = 0; w < n; ++w) {
             if ((w % 100000) == 0) std::cout << "polsT " << w << std::endl;
             if (hasSelT && Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
-            const std::string key = expressions.valuesToString(ts, tCount, w);
+            const std::string key = expressions.valuesToBinString(ts, tCount, w);
             auto it = tt[index].find(key);
             if (it == tt[index].end()) {
                 tt[index][key] = 1;
@@ -415,7 +417,7 @@ void Engine::checkPermutationIdentities (void)
             omega_t w2 = (ichunk == (chunks - 1)) ? n: w1 + wn;
             for (omega_t w = w1; w < w2; ++w) {
                 if (hasSelF && Goldilocks::isZero(expressions.getEvaluation(selF, w))) continue;
-                const std::string key = expressions.valuesToString(fs, fCount, w);
+                const std::string key = expressions.valuesToBinString(fs, fCount, w);
                 auto it = tt[index].find(key);
                 if (it == tt[index].end()) {
                     std::cerr << "problem on w:" << w << " " << std::endl;
@@ -448,8 +450,9 @@ void Engine::checkPolIdentities (void)
         uid_t exprid = polIdentities[index]["e"];
         if (expressions.isZero(exprid)) continue;
         ++errorCount;
-        std::cerr << "Fail plookup identity #" << index << " expr:" << exprid << " " << polIdentities[index]["fileName"] << ":"
-                  << polIdentities[index]["line"] << " on w:" << expressions.getFirstNonZeroEvaluation(exprid) << std::endl;
+        omega_t w = expressions.getFirstNonZeroEvaluation(exprid);
+        std::cerr << "Fail polynomial identity #" << index << " expr:" << exprid << " " << polIdentities[index]["fileName"] << ":"
+                  << polIdentities[index]["line"] << " on w:" << w << " value:" << Goldilocks::toString(expressions.getEvaluation(exprid,w)) << std::endl;
     }
 
     std::cout << "> polIdentities " << polIdentitiesCount << " verified, ";
@@ -460,14 +463,9 @@ void Engine::checkPolIdentities (void)
     }
 }
 
-bool Engine::verifyExpressionsWithFile (const std::string &filename)
+bool Engine::verifyExpressionsWithFile (void)
 {
-    /*
-       ../../data/v0.4.0.0-rc.1-basic/zkevm.expr
-       /home/ubuntu/zkevm-proverjs/build/v0.4.0.0-rc.1-basic/zkevm.expr
-       /home/ubuntu/zkevm-proverjs/build/v0.3.0.0-rc.1/zkevm.expr
-    */
-    uint64_t *exprs = (uint64_t *)mapFile(filename);
+    uint64_t *exprs = (uint64_t *)mapFile(options.expressionsVerifyFilename);
 
     uint differences = 0;
     const uint maxDifferences = 2000;
@@ -475,7 +473,8 @@ bool Engine::verifyExpressionsWithFile (const std::string &filename)
         if (w && (w % 1000 == 0)) std::cout << "w:" << w << std::endl;
         for (uint index = 0; index < expressions.count && differences < maxDifferences; ++index) {
             const uint64_t evaluation = Goldilocks::toU64(expressions.getEvaluation(index, w, Expressions::GROUP_NONE));
-            const uint64_t _evaluation = exprs[index + expressions.count * w];
+            const uint64_t offset = (options.expressionsVerifyFileMode == EvaluationMapMode::BY_OMEGAS) ? (index + expressions.count * w) : (index * n +  w);
+            const uint64_t _evaluation = exprs[offset ];
             if (evaluation != _evaluation) {
                 ++differences;
                 std::cout << "w:" << w << " [" << index << "/" << w << "=" << (index + expressions.count * w) << "] "  << _evaluation << " " << evaluation

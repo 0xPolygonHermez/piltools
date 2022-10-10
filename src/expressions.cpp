@@ -6,6 +6,7 @@
 #include <string>
 #include <list>
 #include <algorithm>
+#include <sstream>
 #include "omp.h"
 
 #include "expressions.hpp"
@@ -85,7 +86,7 @@ void Expressions::recursiveCalculateDependencies (uid_t expressionId)
     dependencies.add(expressionId);*/
 }
 
-std::string Expressions::valuesToString(uid_t *values, dim_t size, omega_t w)
+std::string Expressions::valuesToBinString(uid_t *values, dim_t size, omega_t w)
 {
     FrElement elements[size];
     std::string result;
@@ -94,6 +95,16 @@ std::string Expressions::valuesToString(uid_t *values, dim_t size, omega_t w)
     }
     result.append((const char *)elements, sizeof(FrElement));
     return result;
+}
+
+std::string Expressions::valuesToString(uid_t *values, dim_t size, omega_t w)
+{
+    std::stringstream ss;
+    for (dim_t index = 0; index < size; ++index) {
+        if (index) ss << ",";
+        ss << Goldilocks::toString(getEvaluation(values[index], w));
+    }
+    return ss.str();
 }
 
 void Expressions::expandAlias(void)
@@ -133,7 +144,7 @@ FrElement Expressions::getEvaluation(uid_t id, omega_t w, uid_t evalGroupId)
         assert(false);
         exit(1);
     }
-    if (!expressions[id].evaluated) {
+    if (checkEvaluated && !expressions[id].evaluated) {
         std::cerr << " no evaluated expression id:" << id << " evalGroupId:" << evalGroupId << std::endl;
         assert(false);
         exit(1);
@@ -212,12 +223,8 @@ void Expressions::debugEval(uid_t expressionId, omega_t w)
 
 void Expressions::evalAll(void)
 {
-    n = 64;
-
-
-
     if (evaluations == NULL) {
-        std::cout << "creating evaluations " << count * engine.n << "(" << count << "*" << engine.n << ")" << std::endl;
+        std::cout << "creating evaluations " << count * engine.n << "(" << count << "*" << engine.n << ") size:" <<  (count * engine.n * sizeof(FrElement)) << std::endl;
         evaluations = new FrElement[count * (uint64_t)n];
     }
     struct timeval time_now;
@@ -226,15 +233,15 @@ void Expressions::evalAll(void)
 
     // std::cout << "omp_get_max_threads: " << omp_get_max_threads() << std::endl;
     uint64_t done = 0;
-    // #pragma omp parallel for
+    #pragma omp parallel for
     for (uint icpu = 0; icpu < cpus; ++icpu) {
         evalAllCpuGroup(icpu, done);
     }
+    expandAlias();
 
     gettimeofday(&time_now, nullptr);
     time_t endT = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
     std::cout << "time(ms):" <<  (endT - startT) << std::endl;
-    // expandAlias();
 }
 
 void Expressions::afterEvaluationsLoaded (void)
@@ -264,20 +271,21 @@ void Expressions::evalAllCpuGroup (uid_t icpu, uint64_t &done)
             std::cout << "[" << icpu <<"] CPU (E:" << iexpr << ") " << idep << "/" << depCount << std::endl;
         }
 
+/*
         if (iexpr == 244  || iexpr == 246 || iexpr == 288) {
             std::cout << "ALIAS(" << iexpr << "):" << expressions[iexpr].isAlias() << std::endl;
             std::cout << "EVAL(" << iexpr << "):" << Goldilocks::toString(expressions[iexpr].eval(engine, 0)) << std::endl;
             expressions[iexpr].dump();
-        }
+        }*/
 
         // for (omega_t w = 0; w < engine.n; ++w) {
         for (omega_t w = 0; w < n; ++w) {
-            evaluations[ (uint64_t)n * iexpr + w ] = expressions[iexpr].eval(engine, w);
+            evaluations[ (uint64_t)n * iexpr + w ] = expressions[iexpr].eval(engine, w, iexpr == 222288);
         }
         expressions[iexpr].evaluated = true;
 
         #ifdef __DEBUG__
-        std::cout << "expression[" << iexpr << "] evaluated" << std::endl;
+        // std::cout << "expression[" << iexpr << "] evaluated" << std::endl;
         #endif
     }
 }
@@ -288,6 +296,7 @@ Expressions::Expressions (Engine &engine)
     evaluations = NULL;
     expressions = NULL;
     externalEvaluations = false;
+    checkEvaluated = true;
     cpus = 64;
     cpuGroups = new std::list<uid_t>[cpus];
 }

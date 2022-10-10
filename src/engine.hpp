@@ -17,6 +17,8 @@ namespace pil {
 
 namespace pil {
 
+enum class EvaluationMapMode { BY_OMEGAS, BY_POLS };
+
 class EngineOptions {
     public:
         std::string pilJsonFilename = "";
@@ -25,6 +27,8 @@ class EngineOptions {
         bool loadExpressions = false;
         bool saveExpressions = false;
         std::string expressionsFilename = "";
+        std::string expressionsVerifyFilename = "";
+        EvaluationMapMode expressionsVerifyFileMode = EvaluationMapMode::BY_OMEGAS;
 };
 
 class Engine {
@@ -81,7 +85,7 @@ class Engine {
         void precompileExpression(nlohmann::json& node);
         void loadAndCompileExpressions (void);
         void calculateAllExpressions (void);
-        bool verifyExpressionsWithFile(const std::string &filename);
+        bool verifyExpressionsWithFile (void);
 
         void *mapFile(const std::string &filename, dim_t size = 0, bool wr = false);
         void unmap (void *);

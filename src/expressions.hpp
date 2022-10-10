@@ -25,6 +25,7 @@ class Expressions {
         dim_t n;
         uint count = 0;
         Engine &engine;
+        bool checkEvaluated;
         bool externalEvaluations;
 
         const Reference *add (const std::string &name, const Reference &value);
@@ -48,6 +49,7 @@ class Expressions {
         Expressions (Engine &engine);
         ~Expressions ( void );
         bool isZero(uid_t id);
+        std::string valuesToBinString(uid_t *values, dim_t size, omega_t w);
         std::string valuesToString(uid_t *values, dim_t size, omega_t w);
         void setEvaluations(FrElement *evaluations);
         dim_t getEvaluationsSize (void) { return (uint64_t)count * (uint64_t)n * sizeof(FrElement); };
