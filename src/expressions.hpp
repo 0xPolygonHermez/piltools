@@ -39,7 +39,7 @@ class Expressions {
         uint replaceOperationValue (OperationValueType oldValueType, uint64_t oldValue, OperationValueType newValueType, uint64_t newValue);
         void loadAndCompile (nlohmann::json &pilExpressions);
         void evalAll (void);
-        void evalAllCpuGroup(uid_t icpu);
+        void evalAllCpuGroup(uid_t icpu, uint64_t &done);
         void debugEval (uid_t expressionId, omega_t w = 0);
         void dumpExpression (uid_t expressionId) { expressions[expressionId].dump(); };
         bool isAlias (uid_t expressionId) { return expressions[expressionId].isAlias(); };
@@ -52,6 +52,8 @@ class Expressions {
         void setEvaluations(FrElement *evaluations);
         dim_t getEvaluationsSize (void) { return (uint64_t)count * (uint64_t)n * sizeof(FrElement); };
         void afterEvaluationsLoaded (void);
+        omega_t getFirstNonZeroEvaluation (uid_t expressionId) { return expressions[expressionId].getFirstNonZeroEvaluation(); };
+        void expandAlias (void);
     protected:
         Reference *values = NULL;
         FrElement *evaluations;

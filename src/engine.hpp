@@ -81,7 +81,7 @@ class Engine {
         void precompileExpression(nlohmann::json& node);
         void loadAndCompileExpressions (void);
         void calculateAllExpressions (void);
-        void verifyExpressionsWithFile(const std::string &filename);
+        bool verifyExpressionsWithFile(const std::string &filename);
 
         void *mapFile(const std::string &filename, dim_t size = 0, bool wr = false);
         void unmap (void *);

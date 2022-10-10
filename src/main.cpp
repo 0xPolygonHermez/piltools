@@ -14,6 +14,7 @@
 #include "omp.h"
 #include <goldilocks_base_field.hpp>
 #include "engine.hpp"
+#include "tools.hpp"
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -61,12 +62,12 @@ int main ( int argc, char *argv [])
         pilJsonFilename: pilJsonFilename,
         constFilename: constFilename,
         commitFilename: commitFilename,
-        loadExpressions: true,
-        expressionsFilename: basePath + "zkevm.expr.eval.bin"
+        // loadExpressions: true,
+        // expressionsFilename: basePath + "zkevm.expr.eval.bin"
     });
     // engine.getEvaluation("Main.STEP", 10);
     // engine.getEvaluation("Arith.x1", 12, 3);
     // engine.getEvaluation("Main.A0", 12);
     engine.getEvaluation("Main.STEP", 9584);
-    // std::cout << pil.dump() << std::endl;
+    // std::cout << pil.dump() << std::endl;*/
 }

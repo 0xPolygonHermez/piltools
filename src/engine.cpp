@@ -18,6 +18,7 @@
 #include "engine.hpp"
 #include "expression.hpp"
 #include "reference.hpp"
+#include "tools.hpp"
 
 namespace pil {
 
@@ -39,13 +40,13 @@ Engine::Engine(EngineOptions options)
     calculateAllExpressions();
 
     checkPolIdentities();
+    checkPlookupIdentities();
     // checkConnectionIdentities();
     std::cout << "done" << std::endl;
 }
 
 void *Engine::mapFile(const std::string &filename, dim_t size, bool wr )
 {
-
     int fd;
 
     if (wr) {
@@ -120,6 +121,11 @@ void Engine::calculateAllExpressions (void)
         expressions.afterEvaluationsLoaded();
     } else {
         expressions.evalAll();
+        const std::string verifyFilename = "/home/ubuntu/zkevm-proverjs/build/v0.4.0.0-rc.1/zkevm.expr.eval.bin";
+        if (!verifyExpressionsWithFile(verifyFilename)) {
+            std::cerr << "verification with file " << verifyFilename << " fails !!" << std::endl;
+            exit(1);
+        }
     }
     // expressions.dumpExpression(351);
 }
@@ -268,67 +274,193 @@ void Engine::checkConnectionIdentities (void)
     }
 }
 
+
 void Engine::checkPlookupIdentities (void)
 {
     std::cout << "plookupIdentities ....." << std::endl;
-    auto plookupIdentities = pil["plookupIdentities"];
-    for (auto it = plookupIdentities.begin(); it != plookupIdentities.end(); ++it) {
-        std::cout << *it << std::endl;
-        uid_t selT = (*it)["selT"];
-        uid_t selF = (*it)["selF"];
-        dim_t tCount = (*it)["t"].size();
-        dim_t fCount = (*it)["f"].size();
+    auto identities = pil["plookupIdentities"];
+    dim_t identitiesCount = identities.size();
+    std::unordered_set<std::string> tt[identitiesCount];
+    const uint64_t doneStep = n / 20;
+
+    uint64_t done = 0;
+    uint64_t lastdone = 0;
+    auto startT = Tools::startCrono();
+    #pragma omp parallel for
+    for (dim_t identityIndex = 0; identityIndex < identitiesCount; ++identityIndex) {
+        auto identity = identities[identityIndex];
+
+        bool hasSelT = identity["selT"].is_null() == false;
+        uid_t selT = hasSelT ? (uid_t)(identity["selT"]) : 0;
+        dim_t tCount = identity["t"].size();
         uid_t ts[tCount];
-        uid_t fs[fCount];
 
         for (uid_t index = 0; index < tCount; ++index) {
-            ts[index] = (*it)["t"][index];
+            ts[index] = identity["t"][index];
         }
-
-        std::unordered_multiset<std::string> tt;
 
         for (omega_t w = 0; w < n; ++w) {
-            if (Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
-            tt.insert(expressions.valuesToString(ts, tCount, w));
+            if (hasSelT && Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
+            tt[identityIndex].insert(expressions.valuesToString(ts, tCount, w));
+        }
+        #pragma omp critical
+        {
+            done += 1;
+            std::cout << "preparing plookup selT/T " << pil::Tools::percentBar(done, identitiesCount, false)
+                      << done << "/" << identitiesCount;
+            if (done == identitiesCount) {
+                std::cout << std::endl << std::flush;
+            } else {
+                std::cout << "\t\r" << std::flush;
+            }
         }
     }
+    std::cout << std::endl << std::flush;
+
+    const uint64_t totaln = n * identitiesCount;
+    for (dim_t identityIndex = 0; identityIndex < identitiesCount; ++identityIndex) {
+        const std::string label = "plookup[" + std::to_string(identityIndex+1) + "/" + std::to_string(identitiesCount) + "] ";
+        auto identity = identities[identityIndex];
+        uint64_t done = 0;
+        uint64_t lastdone = 0;
+
+        bool hasSelF = identity["selF"].is_null() == false;
+        uid_t selF = hasSelF ? (uid_t)(identity["selF"]) : 0;
+        dim_t fCount = identity["f"].size();
+        uid_t fs[fCount];
+
+
+        for (uid_t index = 0; index < fCount; ++index) {
+            fs[index] = identity["f"][index];
+        }
+        uint chunks = 8192;
+        uint wn = n / chunks;
+
+        #pragma omp parallel for
+        for (uint64_t ichunk = 0; ichunk < chunks; ++ichunk) {
+            omega_t w1 = wn * ichunk;
+            omega_t w2 = (ichunk == (chunks - 1)) ? n: w1 + wn;
+            for (omega_t w = w1; w < w2; ++w) {
+                if (hasSelF && Goldilocks::isZero(expressions.getEvaluation(selF, w))) continue;
+                if (tt[identityIndex].count(expressions.valuesToString(fs, fCount, w)) == 0) {
+                    std::cerr << "problem on w:" << w << " " << std::endl;
+                }
+            }
+            #pragma omp critical
+            {
+                done += (w2 - w1);
+                if ((done - lastdone) > doneStep || done == n || !lastdone) {
+                    std::cout << label << pil::Tools::percentBar(done + identityIndex * n, totaln);
+
+                    if (done == n && identityIndex == (identitiesCount - 1)) {
+                        std::cout << std::endl << std::flush;
+                    } else {
+                        std::cout << "\t\r" << std::flush;
+                    }
+                    lastdone = done;
+                }
+            }
+        }
+    }
+    std::cout << std::endl << std::flush;
+    Tools::endCronoAndShowIt(startT);
 }
 
 void Engine::checkPermutationIdentities (void)
 {
     std::cout << "permutationIdentities ....." << std::endl;
     auto permutationIdentities = pil["permutationIdentities"];
-    for (auto it = permutationIdentities.begin(); it != permutationIdentities.end(); ++it) {
-        for (auto t = (*it)["t"].begin(); t != (*it)["t"].end(); ++t) {
-            uid_t id = *t;
-            std::cout << "adding t expression: " << id << std::endl;
+    dim_t permutationIdentitiesCount = permutationIdentities.size();
+    std::unordered_map<std::string, int64_t> tt[permutationIdentitiesCount];
+
+    auto startT = Tools::startCrono();
+    for (dim_t index = 0; index < permutationIdentitiesCount; ++index) {
+        std::cout << "plookup " << (index+1) << "/" << permutationIdentitiesCount << std::endl;
+        auto permutation = permutationIdentities[index];
+
+        bool hasSelT = permutation["selT"].is_null() == false;
+        bool hasSelF = permutation["selF"].is_null() == false;
+        uid_t selT = hasSelT ? (uid_t)(permutation["selT"]) : 0;
+        uid_t selF = hasSelF ? (uid_t)(permutation["selF"]) : 0;
+        dim_t tCount = permutation["t"].size();
+        dim_t fCount = permutation["f"].size();
+        uid_t ts[tCount];
+        uid_t fs[fCount];
+
+        for (uid_t index = 0; index < tCount; ++index) {
+            ts[index] = permutation["t"][index];
         }
-        for (auto selT = (*it)["selT"].begin(); selT != (*it)["selT"].end(); ++selT) {
-            uid_t id = *selT;
-            std::cout << "adding selT expression: " << id << std::endl;
+
+        for (omega_t w = 0; w < n; ++w) {
+            if ((w % 100000) == 0) std::cout << "polsT " << w << std::endl;
+            if (hasSelT && Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
+            const std::string key = expressions.valuesToString(ts, tCount, w);
+            auto it = tt[index].find(key);
+            if (it == tt[index].end()) {
+                tt[index][key] = 1;
+            } else {
+                ++it->second;
+            }
         }
-        for (auto f = (*it)["f"].begin(); f != (*it)["f"].end(); ++f) {
-            uid_t id = *f;
-            std::cout << "adding f expression: " << id << std::endl;
+
+        for (uid_t index = 0; index < fCount; ++index) {
+            fs[index] = permutation["f"][index];
         }
-        for (auto selF = (*it)["selF"].begin(); selF != (*it)["selF"].end(); ++selF) {
-            uid_t id = *selF;
-            std::cout << "adding selF expression: " << id << std::endl;
+        uint chunks = 8192;
+        uint wn = n / chunks;
+        uint done = 0;
+        #pragma omp parallel for
+        for (uint64_t ichunk = 0; ichunk < chunks; ++ichunk) {
+            omega_t w1 = wn * ichunk;
+            omega_t w2 = (ichunk == (chunks - 1)) ? n: w1 + wn;
+            for (omega_t w = w1; w < w2; ++w) {
+                if (hasSelF && Goldilocks::isZero(expressions.getEvaluation(selF, w))) continue;
+                const std::string key = expressions.valuesToString(fs, fCount, w);
+                auto it = tt[index].find(key);
+                if (it == tt[index].end()) {
+                    std::cerr << "problem on w:" << w << " " << std::endl;
+                } else {
+                    if (it->second <= 0) {
+                        std::cerr << "problem on w:" << w << " " << std::endl;
+                    }
+                    --it->second;
+                }
+            }
+            #pragma omp critical
+            {
+                done += (w2 - w1);
+                std::cout << done << "/" << n << std::endl;
+            }
         }
     }
+    Tools::endCronoAndShowIt(startT);
 }
 
 void Engine::checkPolIdentities (void)
 {
-    std::cout << "polIdentities ....." << std::endl;
     auto polIdentities = pil["polIdentities"];
-    for (auto it = polIdentities.begin(); it != polIdentities.end(); ++it) {
-        const uid_t eid = (*it)["e"];
-        std::cout << "identity " << eid << " " << expressions.isZero(eid) << std::endl;
+    dim_t polIdentitiesCount = polIdentities.size();
+    dim_t errorCount = 0;
+
+    std::cout << "verify " << polIdentitiesCount << " polIdentities ....." << std::endl;
+
+    for (dim_t index = 0; index < polIdentitiesCount; ++index) {
+        uid_t exprid = polIdentities[index]["e"];
+        if (expressions.isZero(exprid)) continue;
+        ++errorCount;
+        std::cerr << "Fail plookup identity #" << index << " expr:" << exprid << " " << polIdentities[index]["fileName"] << ":"
+                  << polIdentities[index]["line"] << " on w:" << expressions.getFirstNonZeroEvaluation(exprid) << std::endl;
+    }
+
+    std::cout << "> polIdentities " << polIdentitiesCount << " verified, ";
+    if (!errorCount) {
+        std::cout << "no errors found ... [\x1B[1;32mOK\x1B[0m]" << std::endl;
+    } else {
+        std::cout << "found " << errorCount << " expressions with errors ... [\x1B[1;31mFAIL\x1B[0m]" << std::endl;
     }
 }
 
-void Engine::verifyExpressionsWithFile (const std::string &filename)
+bool Engine::verifyExpressionsWithFile (const std::string &filename)
 {
     /*
        ../../data/v0.4.0.0-rc.1-basic/zkevm.expr
@@ -338,18 +470,20 @@ void Engine::verifyExpressionsWithFile (const std::string &filename)
     uint64_t *exprs = (uint64_t *)mapFile(filename);
 
     uint differences = 0;
-    for (uint w = 0; w < n && differences < 5000; ++w) {
+    const uint maxDifferences = 2000;
+    for (uint w = 0; w < n && differences < maxDifferences; ++w) {
         if (w && (w % 1000 == 0)) std::cout << "w:" << w << std::endl;
-        for (uint index = 0; index < expressions.count && differences < 5000; ++index) {
+        for (uint index = 0; index < expressions.count && differences < maxDifferences; ++index) {
             const uint64_t evaluation = Goldilocks::toU64(expressions.getEvaluation(index, w, Expressions::GROUP_NONE));
             const uint64_t _evaluation = exprs[index + expressions.count * w];
             if (evaluation != _evaluation) {
                 ++differences;
-                std::cout << "w:" << w << " [" << index << "/" << w << "=" << (index + expressions.count * w) << "] "  << _evaluation << " " << evaluation << std::endl;
+                std::cout << "w:" << w << " [" << index << "/" << w << "=" << (index + expressions.count * w) << "] "  << _evaluation << " " << evaluation
+                          << (expressions.isAlias(index)? "ALIAS":"") << std::endl;
             }
         }
     }
-
+    return differences == 0;
 }
 
 Engine::~Engine (void)

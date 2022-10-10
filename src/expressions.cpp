@@ -96,25 +96,47 @@ std::string Expressions::valuesToString(uid_t *values, dim_t size, omega_t w)
     return result;
 }
 
+void Expressions::expandAlias(void)
+{
+    uid_t aliasExpressions[count];
+
+    std::cout << "expanding alias ..." << std::endl;
+    dim_t aliasCount = 0;
+    for (uid_t iexpr = 0; iexpr < count; ++iexpr) {
+        if (!expressions[iexpr].isAlias()) continue;
+        aliasExpressions[aliasCount++] = iexpr;
+    }
+    std::cout << "found " << aliasCount << " alias ..." << std::endl;
+
+    #pragma omp parallel for
+    for (uid_t ialias = 0; ialias < aliasCount; ++ialias) {
+        uid_t id = aliasExpressions[ialias];
+        for (omega_t w = 0; w < n; ++w) {
+           evaluations[(uint64_t)id * n + w] = expressions[id].getAliasEvaluation(engine, w, GROUP_NONE);
+        }
+    }
+    std::cout << "expanding alias done." << std::endl;
+}
+
 FrElement Expressions::getEvaluation(uid_t id, omega_t w, uid_t evalGroupId)
 {
     if (id >= count) {
         throw std::runtime_error("Out of range on expressions accessing id "+std::to_string(id)+" but last id was "+std::to_string(count - 1));
     }
 
-    if (expressions[id].isAlias()) {
+/*    if (expressions[id].isAlias()) {
         return expressions[id].getAliasEvaluation(engine, w, evalGroupId);
-    }
+    }*/
 
     if (evalGroupId != GROUP_NONE && expressions[id].groupId != evalGroupId) {
-        std::cout << "evalGroupId:" << evalGroupId << " expressions[" << id << "].groupId:" << expressions[id].groupId << std::endl;
+        std::cerr << " evalGroupId:" << evalGroupId << " expressions[" << id << "].groupId:" << expressions[id].groupId << std::endl;
         assert(false);
-        exit(0);
+        exit(1);
     }
     if (!expressions[id].evaluated) {
-        std::cout << "no evaluated expression id:" << id << " evalGroupId:" << evalGroupId << std::endl;
+        std::cerr << " no evaluated expression id:" << id << " evalGroupId:" << evalGroupId << std::endl;
         assert(false);
-        exit(0);
+        exit(1);
     }
 /*  TO VERIFY
     if (expressions[id].isAlias()) {
@@ -129,9 +151,10 @@ bool Expressions::isZero(uid_t id)
         throw std::runtime_error("Out of range on expressions accessing id "+std::to_string(id)+" but last id was "+std::to_string(count - 1));
     }
 
-    if (expressions[id].isAlias()) {
+/*    if (expressions[id].isAlias()) {
+        return false;
         throw std::runtime_error("Alias not supported");
-    }
+    }*/
     return expressions[id].isZero;
 }
 
@@ -189,6 +212,10 @@ void Expressions::debugEval(uid_t expressionId, omega_t w)
 
 void Expressions::evalAll(void)
 {
+    n = 64;
+
+
+
     if (evaluations == NULL) {
         std::cout << "creating evaluations " << count * engine.n << "(" << count << "*" << engine.n << ")" << std::endl;
         evaluations = new FrElement[count * (uint64_t)n];
@@ -198,33 +225,34 @@ void Expressions::evalAll(void)
     time_t startT = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
 
     // std::cout << "omp_get_max_threads: " << omp_get_max_threads() << std::endl;
-    #pragma omp parallel for
+    uint64_t done = 0;
+    // #pragma omp parallel for
     for (uint icpu = 0; icpu < cpus; ++icpu) {
-        evalAllCpuGroup(icpu);
+        evalAllCpuGroup(icpu, done);
     }
 
     gettimeofday(&time_now, nullptr);
     time_t endT = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
     std::cout << "time(ms):" <<  (endT - startT) << std::endl;
+    // expandAlias();
 }
 
 void Expressions::afterEvaluationsLoaded (void)
 {
     #pragma omp parallel for
     for (uid_t iexpr = 0; iexpr < count; ++iexpr) {
-        if (isAlias(iexpr)) continue;
-        bool expressionIsZero = true;
+        // if (isAlias(iexpr)) continue;
+        expressions[iexpr].setIsZeroFlag(true);
         expressions[iexpr].setEvaluatedFlag(true);
         for (omega_t w = 0; w < n; ++w) {
             if (Goldilocks::isZero(getEvaluation(iexpr, w))) continue;
-            expressionIsZero = false;
+            expressions[iexpr].setIsZeroFlag(false, w);
             break;
         }
-        expressions[iexpr].setIsZeroFlag(expressionIsZero);
     }
 }
 
-void Expressions::evalAllCpuGroup (uid_t icpu)
+void Expressions::evalAllCpuGroup (uid_t icpu, uint64_t &done)
 {
     dim_t depCount = dependencies.size();
     for (int idep = 0; idep < depCount; ++idep) {
@@ -236,10 +264,18 @@ void Expressions::evalAllCpuGroup (uid_t icpu)
             std::cout << "[" << icpu <<"] CPU (E:" << iexpr << ") " << idep << "/" << depCount << std::endl;
         }
 
-        for (omega_t w = 0; w < engine.n; ++w) {
+        if (iexpr == 244  || iexpr == 246 || iexpr == 288) {
+            std::cout << "ALIAS(" << iexpr << "):" << expressions[iexpr].isAlias() << std::endl;
+            std::cout << "EVAL(" << iexpr << "):" << Goldilocks::toString(expressions[iexpr].eval(engine, 0)) << std::endl;
+            expressions[iexpr].dump();
+        }
+
+        // for (omega_t w = 0; w < engine.n; ++w) {
+        for (omega_t w = 0; w < n; ++w) {
             evaluations[ (uint64_t)n * iexpr + w ] = expressions[iexpr].eval(engine, w);
         }
         expressions[iexpr].evaluated = true;
+
         #ifdef __DEBUG__
         std::cout << "expression[" << iexpr << "] evaluated" << std::endl;
         #endif
@@ -287,7 +323,6 @@ void Expressions::mergeGroup (uid_t toId, uid_t fromId)
 
 void Expressions::recursiveSetGroup (uid_t exprId, uid_t groupId)
 {
-    std::cout << "recursiveSetGroup(exprId:" << exprId << ", groupId:" << groupId << ") #" << expressions[exprId].dependencies.size() << std::endl;
     if (expressions[exprId].groupId != GROUP_NONE && expressions[exprId].groupId != groupId) {
         mergeGroup(groupId, expressions[exprId].groupId);
         return;
@@ -368,9 +403,7 @@ void Expressions::calculateGroup (void)
             if (cpuGroupSizes[icpu] >= cpuGroupSizeTarget) continue;
             groupId = *it;
             groupSize = groupCounters[groupId];
-            std::cout << "> adding group " << groupId << "(" << groupSize << ") to cpu " << icpu << "(" << cpuGroupSizes[icpu];
             cpuGroupSizes[icpu] += groupSize;
-            std::cout << ") => " << cpuGroupSizes[icpu] << std::endl;
             cpuGroups[icpu].push_back(groupId);
             ++it;
         }

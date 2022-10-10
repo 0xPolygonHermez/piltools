@@ -17,6 +17,7 @@ Expression::Expression (void)
     aliasEvaluations = NULL;
     isZero = true;
     nextExpression = false;
+    firstNonZeroEvaluation = 0;
 }
 
 OperationValueType Expression::getAliasType (void) const
