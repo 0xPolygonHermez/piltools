@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <nlohmann/json.hpp>
 #include <goldilocks_base_field.hpp>
+#include <unordered_set>
 namespace pil {
     class Engine;
 }
@@ -91,6 +92,12 @@ class Engine {
         void unmap (void *);
         void unmapAll (void);
         bool checkFilename (const std::string &filename, bool toWrite = false, bool exceptionOnFail = false);
+        template<typename SetFunc>
+        void prepareT (nlohmann::json& identities, const std::string &label, SetFunc set);
+        template<typename GetFunc>
+        void verifyF (nlohmann::json& identities, const std::string &label, GetFunc get);
+        inline void updatePercentT ( const std::string &title, uint64_t &done, uint64_t total );
+        inline void updatePercentF ( const std::string &title, uint64_t &done, uint64_t &lastdone, uint64_t delta, uint64_t doneStep, dim_t index, dim_t count );
 };
 
 }

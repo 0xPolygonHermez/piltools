@@ -28,13 +28,8 @@ class Expressions {
         bool checkEvaluated;
         bool externalEvaluations;
 
-        const Reference *add (const std::string &name, const Reference &value);
-        const Reference *get (uint id) { return values + id; };
         void map (void *data) { evaluations = (FrElement *)data; }
         FrElement getEvaluation (uid_t id, omega_t w, uid_t evalGroupId = GROUP_NONE);
-        const std::string &getName (uint id) { return values[id].name; }
-        void calculateDependencies (void);
-        void recursiveCalculateDependencies (uid_t expressionId);
         uint reduceNumberAliasExpressions (void);
         uint reduceAliasExpressions (void);
         uint replaceOperationValue (OperationValueType oldValueType, uint64_t oldValue, OperationValueType newValueType, uint64_t newValue);
@@ -56,8 +51,9 @@ class Expressions {
         void afterEvaluationsLoaded (void);
         omega_t getFirstNonZeroEvaluation (uid_t expressionId) { return expressions[expressionId].getFirstNonZeroEvaluation(); };
         void expandAlias (void);
+        std::string getName (uid_t expressionId);
+//        std::string getTextFormula (uid_t expressionId);
     protected:
-        Reference *values = NULL;
         FrElement *evaluations;
         void compileExpression (nlohmann::json &pilExpressions, uid_t id);
         void resetGroups (void);

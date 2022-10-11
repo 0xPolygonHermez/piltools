@@ -41,6 +41,7 @@ Engine::Engine(EngineOptions options)
 
     checkPolIdentities();
     checkPlookupIdentities();
+    checkPermutationIdentities();
     // checkConnectionIdentities();
     std::cout << "done" << std::endl;
 }
@@ -275,18 +276,35 @@ void Engine::checkConnectionIdentities (void)
     }
 }
 
-
 void Engine::checkPlookupIdentities (void)
 {
     std::cout << "plookupIdentities ....." << std::endl;
     auto identities = pil["plookupIdentities"];
-    dim_t identitiesCount = identities.size();
-    std::unordered_set<std::string> tt[identitiesCount];
-    const uint64_t doneStep = n / 20;
+    const dim_t identitiesCount = identities.size();
+    auto tt = new std::unordered_set<std::string>[identitiesCount];
+    auto tCount = new dim_t[identitiesCount]();
+    auto fCount = new dim_t[identitiesCount]();
 
-    uint64_t done = 0;
-    uint64_t lastdone = 0;
     auto startT = Tools::startCrono();
+
+    prepareT(identities, "Plookup", [tt, tCount](dim_t index, const std::string &value) { ++tCount[index]; tt[index].insert(value); return 0; });
+    verifyF(identities, "Plookup", [tt, fCount](dim_t index, const std::string &value) { ++fCount[index]; return tt[index].count(value); });
+    for (dim_t index = 0; index < identitiesCount; ++index) {
+        const std::string selector = identities[index]["selT"].is_null() ? "(none)":expressions.getName(identities[index]["selT"]);
+        printf("%-40s|%20s|%10ld|%20s|%10ld\n", (((std::string)identities[index]["fileName"])+ ":" +std::to_string((uint)(identities[index]["line"]))).c_str(),
+            selector.c_str(), (uint64_t)tCount[index], "", (uint64_t)fCount[index]);
+    }
+    Tools::endCronoAndShowIt(startT);
+    delete [] tt;
+}
+
+
+template<typename SetFunc>
+void Engine::prepareT (nlohmann::json& identities, const std::string &label, SetFunc set)
+{
+    uint64_t done = 0;
+    const dim_t identitiesCount = identities.size();
+
     #pragma omp parallel for
     for (dim_t identityIndex = 0; identityIndex < identitiesCount; ++identityIndex) {
         auto identity = identities[identityIndex];
@@ -302,29 +320,26 @@ void Engine::checkPlookupIdentities (void)
 
         for (omega_t w = 0; w < n; ++w) {
             if (hasSelT && Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
-            tt[identityIndex].insert(expressions.valuesToBinString(ts, tCount, w));
+            set(identityIndex, expressions.valuesToBinString(ts, tCount, w));
         }
-        #pragma omp critical
-        {
-            done += 1;
-            std::cout << "preparing plookup selT/T " << pil::Tools::percentBar(done, identitiesCount, false)
-                      << done << "/" << identitiesCount;
-            if (done == identitiesCount) {
-                std::cout << std::endl << std::flush;
-            } else {
-                std::cout << "\t\r" << std::flush;
-            }
-        }
+        updatePercentT("preparing "+label+" selT/T ", done, identitiesCount);
     }
-    std::cout << std::endl << std::flush;
+}
 
+template<typename GetFunc>
+void Engine::verifyF (nlohmann::json& identities, const std::string &label, GetFunc get)
+{
+    const dim_t identitiesCount = identities.size();
+    uint64_t lastdone = 0;
+    uint64_t done = 0;
+
+    const uint64_t doneStep = n / 20;
     const uint64_t totaln = n * identitiesCount;
+    #pragma omp parallel for
     for (dim_t identityIndex = 0; identityIndex < identitiesCount; ++identityIndex) {
-        const std::string label = "plookup[" + std::to_string(identityIndex+1) + "/" + std::to_string(identitiesCount) + "] ";
+        const std::string plabel = label + "[" + std::to_string(identityIndex+1) + "/" + std::to_string(identitiesCount) + "] ";
         const std::string location = (std::string)(identities[identityIndex]["fileName"]) + ":" + std::to_string((uint)(identities[identityIndex]["line"]));
         auto identity = identities[identityIndex];
-        uint64_t done = 0;
-        uint64_t lastdone = 0;
 
         bool hasSelF = identity["selF"].is_null() == false;
         uid_t selF = hasSelF ? (uid_t)(identity["selF"]) : 0;
@@ -338,36 +353,93 @@ void Engine::checkPlookupIdentities (void)
         uint chunks = 8192;
         uint wn = n / chunks;
 
-        #pragma omp parallel for
         for (uint64_t ichunk = 0; ichunk < chunks; ++ichunk) {
             omega_t w1 = wn * ichunk;
             omega_t w2 = (ichunk == (chunks - 1)) ? n: w1 + wn;
             for (omega_t w = w1; w < w2; ++w) {
                 if (hasSelF && Goldilocks::isZero(expressions.getEvaluation(selF, w))) continue;
-                if (tt[identityIndex].count(expressions.valuesToBinString(fs, fCount, w)) == 0) {
-                    std::cerr << "problem on plookup #" << identityIndex << " " << location << " w:" << w << " not found " << expressions.valuesToString(fs, fCount, w) << std::endl;
+                if (get(identityIndex, expressions.valuesToBinString(fs, fCount, w)) == 0 ) {
+                    std::cerr << "problem on " << label << " #" << identityIndex << " " << location << " w:" << w << " not found " << expressions.valuesToString(fs, fCount, w) << std::endl;
                 }
             }
-            #pragma omp critical
-            {
-                done += (w2 - w1);
-                if ((done - lastdone) > doneStep || done == n || !lastdone) {
-                    std::cout << label << pil::Tools::percentBar(done + identityIndex * n, totaln);
+            updatePercentF(label, done, lastdone, w2-w1, doneStep, identityIndex, identitiesCount);
 
-                    if (done == n && identityIndex == (identitiesCount - 1)) {
-                        std::cout << std::endl << std::flush;
-                    } else {
-                        std::cout << "\t\r" << std::flush;
-                    }
-                    lastdone = done;
-                }
-            }
         }
     }
     std::cout << std::endl << std::flush;
-    Tools::endCronoAndShowIt(startT);
 }
 
+inline void Engine::updatePercentT ( const std::string &title, uint64_t &done, uint64_t total )
+{
+    #pragma omp critical
+    {
+        done += 1;
+        std::cout << title << pil::Tools::percentBar(done, total, false)
+                    << done << "/" << total;
+        if (done == total) {
+            std::cout << std::endl << std::endl << std::flush;
+        } else {
+            std::cout << "\t\r" << std::flush;
+        }
+    }
+}
+
+inline void Engine::updatePercentF ( const std::string &title, uint64_t &done, uint64_t &lastdone, uint64_t delta, uint64_t doneStep, dim_t index, dim_t count )
+{
+    #pragma omp critical
+    {
+        done += delta;
+        if ((done - lastdone) > doneStep || (done % n) == 0 || !lastdone) {
+            std::cout << title << pil::Tools::percentBar(done, n * count);
+
+            if (done == (n * count)) {
+                std::cout << std::endl << std::flush;
+            } else {
+                std::cout << "\t\r" << std::flush;
+            }
+            lastdone = done;
+        }
+    }
+}
+
+void Engine::checkPermutationIdentities (void)
+{
+    std::cout << "permutationIdentities ....." << std::endl;
+    auto identities = pil["permutationIdentities"];
+    const dim_t identitiesCount = identities.size();
+    auto tt = new std::unordered_map<std::string, int64_t>[identitiesCount];
+
+    auto startT = Tools::startCrono();
+
+    prepareT(identities, "Permutation", [tt](dim_t index, const std::string &value) { auto it = tt[index].find(value);
+                                                                                      if (it == tt[index].end()) {
+                                                                                        tt[index][value] = 1;
+                                                                                      } else {
+                                                                                        ++it->second;
+                                                                                      }
+                                                                                      return 0; });
+    verifyF(identities, "Permutation", [tt](dim_t index, const std::string &value) { auto it = tt[index].find(value);
+                                                                                     if (it == tt[index].end()) {
+                                                                                        return 0;
+                                                                                     }
+                                                                                     if (it->second > 0) {
+                                                                                        --it->second;
+                                                                                        return 1;
+                                                                                     }
+                                                                                     return 0;});
+    for (dim_t index = 0; index < identitiesCount; ++index) {
+        for (auto it = tt[index].begin(); it != tt[index].end(); ++it) {
+            if (!it->second) {
+                std::cout << "OK " << it->second << std::endl;
+                continue;
+            }
+            std::cerr << "Error on permutation " << it->second << std::endl;
+        }
+    }
+    Tools::endCronoAndShowIt(startT);
+    delete [] tt;
+}
+/*
 void Engine::checkPermutationIdentities (void)
 {
     std::cout << "permutationIdentities ....." << std::endl;
@@ -437,6 +509,8 @@ void Engine::checkPermutationIdentities (void)
     }
     Tools::endCronoAndShowIt(startT);
 }
+
+*/
 
 void Engine::checkPolIdentities (void)
 {

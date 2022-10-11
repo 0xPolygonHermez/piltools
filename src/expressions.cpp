@@ -18,6 +18,38 @@
 
 namespace pil {
 
+std::string Expressions::getName (uid_t expressionId)
+{
+    uid_t id = expressionId;
+    OperationValueType vtype;
+    while ((vtype = expressions[id].getAliasType()) != OperationValueType::NONE) {
+        id = expressions[id].getAliasValueU64();
+        switch (vtype) {
+            case OperationValueType::CONST:  return engine.getConstName(id);
+            case OperationValueType::CM:     return engine.getCommitedName(id);
+            case OperationValueType::PUBLIC:  return engine.getPublicName(id);
+        }
+        if (vtype != OperationValueType::EXP) return "";
+    }
+    return ""; // getTextFormula(id);
+}
+
+/*
+std::string Expressions::getTextFormula (uid_t expressionId)
+{
+    std::string formula = "#:0:";
+    size_t pos, fpos;
+    uid_t operationId;
+    while ((pos = formula.find("#:")) != std::string::npos) {
+        fpos = formula.find(":", pos+2);
+        if (fpos == std::string::npos) {
+            return "ERROR("+std::to_string(pos)+"):"+formula;
+        }
+        operationId = stol(formula.substr(pos+2, fpos-pos-2));
+        formula.replace(pos, fpos-pos+1, operationId < 5 ?
+    }
+}*/
+
 uint Expressions::reduceAliasExpressions (void)
 {
     uint replacements = 0;
@@ -65,25 +97,6 @@ uint Expressions::reduceNumberAliasExpressions (void)
     }
     std::cout << count << " replacements" << std::endl;
     return count;
-}
-
-void Expressions::calculateDependencies (void)
-{
-/*    for (uint index = 0; index < count; ++index) {
-        recursiveCalculateDependencies(index);
-    }
-    std::cout << dependencies.size() << " " << count << std::endl;*/
-}
-
-void Expressions::recursiveCalculateDependencies (uid_t expressionId)
-{
-/*    if (dependencies.contains(expressionId)) return;
-    Expression &expression = expressions[expressionId];
-
-    for (uint index = 0; index < expression.dependencies.size(); ++index) {
-        recursiveCalculateDependencies(expression.dependencies[index]);
-    }
-    dependencies.add(expressionId);*/
 }
 
 std::string Expressions::valuesToBinString(uid_t *values, dim_t size, omega_t w)
@@ -270,13 +283,6 @@ void Expressions::evalAllCpuGroup (uid_t icpu, uint64_t &done)
         {
             std::cout << "[" << icpu <<"] CPU (E:" << iexpr << ") " << idep << "/" << depCount << std::endl;
         }
-
-/*
-        if (iexpr == 244  || iexpr == 246 || iexpr == 288) {
-            std::cout << "ALIAS(" << iexpr << "):" << expressions[iexpr].isAlias() << std::endl;
-            std::cout << "EVAL(" << iexpr << "):" << Goldilocks::toString(expressions[iexpr].eval(engine, 0)) << std::endl;
-            expressions[iexpr].dump();
-        }*/
 
         // for (omega_t w = 0; w < engine.n; ++w) {
         for (omega_t w = 0; w < n; ++w) {

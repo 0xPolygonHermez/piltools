@@ -49,6 +49,9 @@ FrElement References::getEvaluation(uid_t id, omega_t w, index_t index)
 
 std::string References::getName(uid_t id) const
 {
+    if (id > values.size()) {
+        std::cout << "SIZE:" << values.size() << std::endl;
+    }
     return values.at(id)->getName();
 }
 
