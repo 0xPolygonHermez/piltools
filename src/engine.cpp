@@ -235,7 +235,7 @@ void Engine::loadPublics (void)
         index_t idx = (*it)["idx"];
         uid_t id = (*it)["id"];
         std::string polType = (*it)["polType"];
-        std::cout << "name:" << *it << " value:" << std::endl;
+        // std::cout << "name:" << *it << " value:" << std::endl;
         auto type = getReferenceType(name, polType);
         FrElement value;
         switch(type) {
@@ -277,6 +277,18 @@ void Engine::checkConnectionIdentities (void)
     }
 }
 
+int Engine::ErrorNotFoundPlookupValue(dim_t index, const std::string &value, omega_t w)
+{
+    const std::string location = (std::string)(pil["plookupIdentities"][index]["fileName"]) + ":" + std::to_string((uint)(pil["plookupIdentities"][index]["line"]));
+    std::stringstream ss;
+    ss << "Plookup #" << index << " " << location << " w:" << w << " not found " << expressions.valuesBinToString(value) << std::endl;
+    #pragma omp critical
+    {
+        std::cerr << ss.str() << std::endl;
+    }
+    return 0;
+}
+
 void Engine::checkPlookupIdentities (void)
 {
     std::cout << "plookupIdentities ....." << std::endl;
@@ -289,16 +301,92 @@ void Engine::checkPlookupIdentities (void)
     auto startT = Tools::startCrono();
 
     prepareT(identities, "Plookup", [tt, tCount](dim_t index, const std::string &value) { ++tCount[index]; tt[index].insert(value); return 0; });
-    verifyF(identities, "Plookup", [tt, fCount](dim_t index, const std::string &value) { ++fCount[index]; return tt[index].count(value); });
+    verifyF(identities, "Plookup", [tt, fCount,this](dim_t index, const std::string &value, omega_t w) {
+                                                                        ++fCount[index];
+                                                                        int result = tt[index].count(value);
+                                                                        if (result == 0) result = ErrorNotFoundPlookupValue(index, value, w);
+                                                                        return result; });
     Tools::endCronoAndShowIt(startT);
+
     for (dim_t index = 0; index < identitiesCount; ++index) {
         const std::string selector = identities[index]["selT"].is_null() ? "(none)":expressions.getName(identities[index]["selT"]);
         printf("%-40s|%20s|%10ld|%20s|%10ld|%10ld\n", (((std::string)identities[index]["fileName"])+ ":" +std::to_string((uint)(identities[index]["line"]))).c_str(),
             selector.c_str(), (uint64_t)tCount[index], "", (uint64_t)fCount[index], (uint64_t)tt[index].size());
     }
+
+    startT = Tools::startCrono();
+    std::cout << "start to delete" << std::endl;
+    #pragma omp parallel for
+    for (dim_t index = 0; index < identitiesCount+2; ++index) {
+        if (index < identitiesCount) tt[index].clear();
+        if (index == identitiesCount) delete [] tCount;
+        if (index > identitiesCount) delete [] fCount;
+    }
     delete [] tt;
+    std::cout << "end to delete" << std::endl;
+    Tools::endCronoAndShowIt(startT);
 }
 
+int Engine::ErrorPermutationValue(dim_t index, const std::string &value, omega_t w, PermutationError e)
+{
+    const std::string location = (std::string)(pil["permutationIdentities"][index]["fileName"]) + ":" + std::to_string((uint)(pil["permutationIdentities"][index]["line"]));
+    std::stringstream ss;
+    ss << "Permutation #" << index << " " << location;
+    switch (e) {
+        case PermutationError::notFound: ss << " w:" << w << " not found "; break;
+        case PermutationError::notEnought: ss << " w:" << w << " not enougth value "; break;
+        case PermutationError::remainingValues: ss << " remaning " << w << " values "; break;
+    }
+    ss << expressions.valuesBinToString(value) << std::endl;
+    #pragma omp critical
+    {
+        std::cerr << ss.str() << std::endl;
+    }
+    return 0;
+}
+
+
+
+void Engine::checkPermutationIdentities (void)
+{
+    std::cout << "permutationIdentities ....." << std::endl;
+    auto identities = pil["permutationIdentities"];
+    const dim_t identitiesCount = identities.size();
+    auto tt = new std::unordered_map<std::string, int64_t>[identitiesCount];
+
+    auto startT = Tools::startCrono();
+
+    prepareT(identities, "Permutation", [tt](dim_t index, const std::string &value) { auto it = tt[index].find(value);
+                                                                                      if (it == tt[index].end()) {
+                                                                                        tt[index][value] = 1;
+                                                                                      } else {
+                                                                                        ++it->second;
+                                                                                      }
+                                                                                      return 0; });
+    verifyF(identities, "Permutation", [tt, this](dim_t index, const std::string &value, omega_t w) {
+                                                                                     auto it = tt[index].find(value);
+                                                                                     if (it == tt[index].end()) {
+                                                                                        return ErrorPermutationValue(index, value, w, PermutationError::notFound);
+                                                                                     }
+                                                                                     if (it->second > 0) {
+                                                                                        --it->second;
+                                                                                        return 1;
+                                                                                     }
+                                                                                     return ErrorPermutationValue(index, value, w, PermutationError::notEnought);});
+    for (dim_t index = 0; index < identitiesCount; ++index) {
+        for (auto it = tt[index].begin(); it != tt[index].end(); ++it) {
+            if (it->second > 0 && ErrorPermutationValue(index, it->first, it->second, PermutationError::remainingValues) == 0) {
+                break;
+            }
+        }
+    }
+    Tools::endCronoAndShowIt(startT);
+    #pragma omp parallel for
+    for (dim_t index = 0; index < identitiesCount; ++index) {
+        if (index < identitiesCount) tt[index].clear();
+    }
+    delete [] tt;
+}
 
 template<typename SetFunc>
 void Engine::prepareT (nlohmann::json& identities, const std::string &label, SetFunc set)
@@ -327,8 +415,8 @@ void Engine::prepareT (nlohmann::json& identities, const std::string &label, Set
     }
 }
 
-template<typename GetFunc>
-void Engine::verifyF (nlohmann::json& identities, const std::string &label, GetFunc get)
+template<typename CheckFunc>
+void Engine::verifyF (nlohmann::json& identities, const std::string &label, CheckFunc check)
 {
     const dim_t identitiesCount = identities.size();
     uint64_t lastdone = 0;
@@ -339,7 +427,6 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, GetF
     #pragma omp parallel for
     for (dim_t identityIndex = 0; identityIndex < identitiesCount; ++identityIndex) {
         const std::string plabel = label + "[" + std::to_string(identityIndex+1) + "/" + std::to_string(identitiesCount) + "] ";
-        const std::string location = (std::string)(identities[identityIndex]["fileName"]) + ":" + std::to_string((uint)(identities[identityIndex]["line"]));
         auto identity = identities[identityIndex];
 
         bool hasSelF = identity["selF"].is_null() == false;
@@ -350,7 +437,7 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, GetF
         for (uid_t index = 0; index < fCount; ++index) {
             fs[index] = identity["f"][index];
         }
-        uint chunks = 8192;
+        uint chunks = 16; // 8192;
         uint wn = n / chunks;
 
         for (uint64_t ichunk = 0; ichunk < chunks; ++ichunk) {
@@ -358,15 +445,13 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, GetF
             omega_t w2 = (ichunk == (chunks - 1)) ? n: w1 + wn;
             for (omega_t w = w1; w < w2; ++w) {
                 if (hasSelF && Goldilocks::isZero(expressions.getEvaluation(selF, w))) continue;
-                if (get(identityIndex, expressions.valuesToBinString(fs, fCount, w)) == 0 ) {
-                    #pragma omp critical
-                    {
-                        std::cerr << "problem on " << label << " #" << identityIndex << " " << location << " w:" << w << " not found " << expressions.valuesToString(fs, fCount, w) << std::endl;
-                    }
+                if (check(identityIndex, expressions.valuesToBinString(fs, fCount, w), w) == 0 ) {
+                    ichunk = chunks;
+                    w2 = n;
+                    break;
                 }
             }
             updatePercentF(label, done, lastdone, w2-w1, doneStep, identityIndex, identitiesCount);
-
         }
     }
     std::cout << std::endl << std::flush;
@@ -405,115 +490,6 @@ inline void Engine::updatePercentF ( const std::string &title, uint64_t &done, u
     }
 }
 
-void Engine::checkPermutationIdentities (void)
-{
-    std::cout << "permutationIdentities ....." << std::endl;
-    auto identities = pil["permutationIdentities"];
-    const dim_t identitiesCount = identities.size();
-    auto tt = new std::unordered_map<std::string, int64_t>[identitiesCount];
-
-    auto startT = Tools::startCrono();
-
-    prepareT(identities, "Permutation", [tt](dim_t index, const std::string &value) { auto it = tt[index].find(value);
-                                                                                      if (it == tt[index].end()) {
-                                                                                        tt[index][value] = 1;
-                                                                                      } else {
-                                                                                        ++it->second;
-                                                                                      }
-                                                                                      return 0; });
-    verifyF(identities, "Permutation", [tt](dim_t index, const std::string &value) { auto it = tt[index].find(value);
-                                                                                     if (it == tt[index].end()) {
-                                                                                        return 0;
-                                                                                     }
-                                                                                     if (it->second > 0) {
-                                                                                        --it->second;
-                                                                                        return 1;
-                                                                                     }
-                                                                                     return 0;});
-    for (dim_t index = 0; index < identitiesCount; ++index) {
-        for (auto it = tt[index].begin(); it != tt[index].end(); ++it) {
-            if (!it->second) {
-                std::cout << "OK " << it->second << std::endl;
-                continue;
-            }
-            std::cerr << "Error on permutation " << it->second << std::endl;
-        }
-    }
-    Tools::endCronoAndShowIt(startT);
-    delete [] tt;
-}
-/*
-void Engine::checkPermutationIdentities (void)
-{
-    std::cout << "permutationIdentities ....." << std::endl;
-    auto permutationIdentities = pil["permutationIdentities"];
-    dim_t permutationIdentitiesCount = permutationIdentities.size();
-    std::unordered_map<std::string, int64_t> tt[permutationIdentitiesCount];
-
-    auto startT = Tools::startCrono();
-    for (dim_t index = 0; index < permutationIdentitiesCount; ++index) {
-        std::cout << "plookup " << (index+1) << "/" << permutationIdentitiesCount << std::endl;
-        auto permutation = permutationIdentities[index];
-
-        bool hasSelT = permutation["selT"].is_null() == false;
-        bool hasSelF = permutation["selF"].is_null() == false;
-        uid_t selT = hasSelT ? (uid_t)(permutation["selT"]) : 0;
-        uid_t selF = hasSelF ? (uid_t)(permutation["selF"]) : 0;
-        dim_t tCount = permutation["t"].size();
-        dim_t fCount = permutation["f"].size();
-        uid_t ts[tCount];
-        uid_t fs[fCount];
-
-        for (uid_t index = 0; index < tCount; ++index) {
-            ts[index] = permutation["t"][index];
-        }
-
-        for (omega_t w = 0; w < n; ++w) {
-            if ((w % 100000) == 0) std::cout << "polsT " << w << std::endl;
-            if (hasSelT && Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
-            const std::string key = expressions.valuesToBinString(ts, tCount, w);
-            auto it = tt[index].find(key);
-            if (it == tt[index].end()) {
-                tt[index][key] = 1;
-            } else {
-                ++it->second;
-            }
-        }
-
-        for (uid_t index = 0; index < fCount; ++index) {
-            fs[index] = permutation["f"][index];
-        }
-        uint chunks = 8192;
-        uint wn = n / chunks;
-        uint done = 0;
-        #pragma omp parallel for
-        for (uint64_t ichunk = 0; ichunk < chunks; ++ichunk) {
-            omega_t w1 = wn * ichunk;
-            omega_t w2 = (ichunk == (chunks - 1)) ? n: w1 + wn;
-            for (omega_t w = w1; w < w2; ++w) {
-                if (hasSelF && Goldilocks::isZero(expressions.getEvaluation(selF, w))) continue;
-                const std::string key = expressions.valuesToBinString(fs, fCount, w);
-                auto it = tt[index].find(key);
-                if (it == tt[index].end()) {
-                    std::cerr << "problem on w:" << w << " " << std::endl;
-                } else {
-                    if (it->second <= 0) {
-                        std::cerr << "problem on w:" << w << " " << std::endl;
-                    }
-                    --it->second;
-                }
-            }
-            #pragma omp critical
-            {
-                done += (w2 - w1);
-                std::cout << done << "/" << n << std::endl;
-            }
-        }
-    }
-    Tools::endCronoAndShowIt(startT);
-}
-
-*/
 
 void Engine::checkPolIdentities (void)
 {

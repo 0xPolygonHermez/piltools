@@ -4,7 +4,6 @@ namespace pil {
 
 FrElement Reference::getEvaluation(omega_t w, index_t index ) const
 {
-    std::cout << "getEvaluation(" << w << "," << index  << ")" << std::endl;
     return parent.getEvaluation(id, w, index);
 }
 

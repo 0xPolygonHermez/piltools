@@ -60,13 +60,13 @@ bool Expression::compile (nlohmann::json &node)
         // its an alias
         alias = true;
         next = (node.contains("next") && node["next"]);
-        std::cout << "ALIAS: " << vType << node << std::endl;
+        // std::cout << "ALIAS: " << vType << node << std::endl;
 
         const uid_t dependency = operations[0].values[0].set(vType, node);
         if (dependency != OperationValue::DEP_NONE) {
             dependencies.add(dependency);
         }
-        if (next) std::cout << "NEXT ALIAS FOUND" << std::endl;
+        // if (next) std::cout << "NEXT ALIAS FOUND" << std::endl;
     }
     compiled = true;
     return true;
@@ -200,7 +200,7 @@ uint Expression::replaceOperationValue(OperationValueType oldValueType, uint64_t
         for (uint ivalue = 0; ivalue < 2; ++ivalue) {
             if (operations[index].values[ivalue].type == oldValueType &&
                 operations[index].values[ivalue].value.u64 == oldValue) {
-                std::cout << "EXPR[" << id << "] (" << oldValueType << "," << oldValue << ") ==> (" << newValueType << "," << newValue << ")" << std::endl;
+                // std::cout << "EXPR[" << id << "] (" << oldValueType << "," << oldValue << ") ==> (" << newValueType << "," << newValue << ")" << std::endl;
                 operations[index].values[ivalue].type = newValueType;
                 operations[index].values[ivalue].value.u64 = newValue;
                 ++count;

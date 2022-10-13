@@ -100,147 +100,7 @@ uint Expressions::reduceNumberAliasExpressions (void)
     return count;
 }
 
-std::string Expressions::valuesToBinPseudoB64(uid_t *values, dim_t size, omega_t w)
-{
-    unsigned char elements[size * 11];
-    static const char *base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string result;
-
-    uint offset = 0;
-    for (dim_t index = 0; index < size; ++index) {
-        union {
-            uint64_t u64;
-            unsigned char bytes[8];
-        } value;
-        value.u64 = Goldilocks::toU64(getEvaluation(values[index], w));
-        elements[offset++] = base64[value.bytes[0] & 0x3F];
-        elements[offset++] = base64[value.bytes[1] & 0x3F];
-        elements[offset++] = base64[value.bytes[2] & 0x3F];
-        elements[offset++] = base64[(value.bytes[0] >> 6) | ((value.bytes[1] >> 4) & 0x0C) | ((value.bytes[2] >> 2) & 0x30)];
-
-        elements[offset++] = base64[value.bytes[3] & 0x3F];
-        elements[offset++] = base64[value.bytes[4] & 0x3F];
-        elements[offset++] = base64[value.bytes[5] & 0x3F];
-        elements[offset++] = base64[(value.bytes[3] >> 6) | ((value.bytes[4] >> 4) & 0x0C) | ((value.bytes[5] >> 2) & 0x30)];
-
-        elements[offset++] = base64[value.bytes[6] & 0x3F];
-        elements[offset++] = base64[value.bytes[7] & 0x3F];
-        elements[offset++] = base64[(value.bytes[6] >> 6) | ((value.bytes[7] >> 4) & 0x0C)];
-    }
-    // std::cout << "VALUES(" << size << "):" << elements << std::endl;
-    result.append((char *)elements, 11 * size);
-    return result;
-}
-
-std::string Expressions::valuesToBinHex(uid_t *values, dim_t size, omega_t w)
-{
-    static const char *hexvalues = "0123456789ABCDEF";
-    char elements[size * 16];
-    std::string result;
-    uint offset = 0;
-    for (dim_t index = 0; index < size; ++index) {
-        union {
-            uint64_t u64;
-            unsigned char bytes[8];
-        } value;
-        value.u64 = Goldilocks::toU64(getEvaluation(values[index], w));
-        elements[offset++] = hexvalues[value.bytes[0] >> 4];
-        elements[offset++] = hexvalues[value.bytes[0] & 0x0F];
-        elements[offset++] = hexvalues[value.bytes[1] >> 4];
-        elements[offset++] = hexvalues[value.bytes[1] & 0x0F];
-        elements[offset++] = hexvalues[value.bytes[2] >> 4];
-        elements[offset++] = hexvalues[value.bytes[2] & 0x0F];
-        elements[offset++] = hexvalues[value.bytes[3] >> 4];
-        elements[offset++] = hexvalues[value.bytes[3] & 0x0F];
-        elements[offset++] = hexvalues[value.bytes[4] >> 4];
-        elements[offset++] = hexvalues[value.bytes[4] & 0x0F];
-        elements[offset++] = hexvalues[value.bytes[5] >> 4];
-        elements[offset++] = hexvalues[value.bytes[5] & 0x0F];
-        elements[offset++] = hexvalues[value.bytes[6] >> 4];
-        elements[offset++] = hexvalues[value.bytes[6] & 0x0F];
-        elements[offset++] = hexvalues[value.bytes[7] >> 4];
-        elements[offset++] = hexvalues[value.bytes[7] & 0x0F];
-    }
-    result.append(elements, 16 * size);
-    return result;
-}
-
-std::string Expressions::valuesToNine(uid_t *values, dim_t size, omega_t w)
-{
-    struct __attribute__ ((packed)) {
-        uint64_t u64;
-        uint8_t bits;
-    } elements[size];
-    memset(elements, 0, size * 9);
-
-    std::string result;
-    uint offset = 0;
-    for (dim_t index = 0; index < size; ++index) {
-        const uint64_t value = Goldilocks::toU64(getEvaluation(values[index], w));
-        elements[index].u64 = value | 0x0101010101010101;
-        elements[index].bits = (value & 0x0100000000000000) >> 56 |
-                               (value & 0x0001000000000000) >> 42 |
-                               (value & 0x0000010000000000) >> 35 |
-                               (value & 0x0000000100000000) >> 28 |
-                               (value & 0x0000000001000000) >> 21 |
-                               (value & 0x0000000000010000) >> 14 |
-                               (value & 0x0000000000000100) >> 7 |
-                               (value & 0x0000000000000001);
-    }
-    result.append((char *)elements, 9 * size);
-    return result;
-}
-
-std::string Expressions::valuesToBinPackZero(uid_t *values, dim_t size, omega_t w)
-{
-    unsigned char elements[size * 16];
-    uint offset = 0;
-    for (dim_t index = 0; index < size; ++index) {
-        union {
-            uint64_t u64;
-            unsigned char bytes[8];
-        } value;
-        value.u64 = Goldilocks::toU64(getEvaluation(values[index], w));
-        uint8_t zeromap = 0;
-        if (value.bytes[0]) elements[offset++] = value.bytes[0];
-        else ++zeromap;
-        zeromap = zeromap << 1;
-
-        if (value.bytes[1]) elements[offset++] = value.bytes[1];
-        else ++zeromap;
-        zeromap = zeromap << 1;
-
-        if (value.bytes[2]) elements[offset++] = value.bytes[2];
-        else ++zeromap;
-        zeromap = zeromap << 1;
-
-        if (value.bytes[3]) elements[offset++] = value.bytes[3];
-        else ++zeromap;
-        zeromap = zeromap << 1;
-
-        if (value.bytes[4]) elements[offset++] = value.bytes[4];
-        else ++zeromap;
-        zeromap = zeromap << 1;
-
-        if (value.bytes[5]) elements[offset++] = value.bytes[5];
-        else ++zeromap;
-        zeromap = zeromap << 1;
-
-        if (value.bytes[6]) elements[offset++] = value.bytes[6];
-        else ++zeromap;
-        zeromap = zeromap << 1;
-
-        if (value.bytes[7]) elements[offset++] = value.bytes[7];
-        else ++zeromap;
-
-        elements[offset++] = zeromap;
-    }
-    std::string result;
-    result.append((char *)elements, offset);
-    return result;
-}
-
-std::string Expressions::valuesToBinRaw(uid_t *values, dim_t size, omega_t w)
+std::string Expressions::valuesToBinString(uid_t *values, dim_t size, omega_t w)
 {
     uint64_t elements[size];
     for (dim_t index = 0; index < size; ++index) {
@@ -258,6 +118,20 @@ std::string Expressions::valuesToString(uid_t *values, dim_t size, omega_t w)
     for (dim_t index = 0; index < size; ++index) {
         if (index) ss << ",";
         ss << Goldilocks::toString(getEvaluation(values[index], w));
+    }
+    return ss.str();
+}
+
+std::string Expressions::valuesBinToString(const std::string &values)
+{
+    uint size = values.size()/8;
+    uint64_t u64values[size];
+
+    memcpy(u64values, values.c_str(), values.size());
+    std::stringstream ss;
+    for (dim_t index = 0; index < size; ++index) {
+        if (index) ss << ",";
+        ss << u64values[index];
     }
     return ss.str();
 }
@@ -334,11 +208,10 @@ void Expressions::loadAndCompile(nlohmann::json &pilExpressions)
     }
 
     for (uid_t index = 0; index < count; ++index) {
-        std::cout << "========== compiling " << index << "/" << count <<  " ==========" << std::endl;
         compileExpression(pilExpressions, index);
         // e.eval(*this);
     }
-    dependencies.dump();
+    // dependencies.dump();
 }
 
 void Expressions::dumpDependencies (void)
@@ -352,7 +225,6 @@ void Expressions::dumpDependencies (void)
 void Expressions::compileExpression (nlohmann::json &pilExpressions, uid_t id)
 {
     if (!expressions[id].compile(pilExpressions[id])) return;
-    if (id == 0) expressions[id].dump();
 
     const uint dependenciesCount = expressions[id].dependencies.size();
     for (uint idep = 0; idep < dependenciesCount; ++idep) {
@@ -543,10 +415,8 @@ void Expressions::calculateGroup (void)
     std::cout << "groups:" << groupsWithElements << std::endl;
     uint total = 0;
     for (auto it = groupsBySizeDesc.begin(); it != groupsBySizeDesc.end(); ++it) {
-        std::cout << "G " << *it << " " << groupCounters[*it] << (groupHasNextExpressions[*it] ? " next:TRUE":" next:false") << std::endl;
         total += groupCounters[*it];
     }
-    std::cout << "count: " << count << " total:" << total << std::endl;
     dim_t *cpuGroupSizes = new dim_t[cpus]();
 
     dim_t cpuGroupSizeTarget = (count / cpus) + ((count % cpus) != 0);
@@ -570,7 +440,7 @@ void Expressions::calculateGroup (void)
     for (uint icpu = 0; icpu < cpus; ++icpu) {
         totalGroups += cpuGroups[icpu].size();
         total += cpuGroupSizes[icpu];
-        std::cout << "CPU " << icpu << " G:" << cpuGroups[icpu].size() << " E:" << cpuGroupSizes[icpu] << std::endl;
+        // std::cout << "CPU " << icpu << " G:" << cpuGroups[icpu].size() << " E:" << cpuGroupSizes[icpu] << std::endl;
     }
     std::cout << "totalGroups:" << totalGroups << std::endl;
 

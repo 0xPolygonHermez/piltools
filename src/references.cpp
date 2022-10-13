@@ -41,8 +41,6 @@ void References::map(void *data)
 
 FrElement References::getEvaluation(uid_t id, omega_t w, index_t index)
 {
-    std::cout << "getEvaluation(" << id << "," << w << "," << index << ") p=" << evaluations << std::endl;
-
     uint64_t offset = (uint64_t)w * values.size() + id + index;
     return evaluations[offset];
 }

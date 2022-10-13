@@ -50,6 +50,7 @@ class Engine {
         FrElement *cmPols;
         EngineOptions options;
 
+        enum class PermutationError { notFound, notEnought, remainingValues };
         Engine(const EngineOptions options);
         ~Engine (void);
 
@@ -99,6 +100,8 @@ class Engine {
         inline void updatePercentT ( const std::string &title, uint64_t &done, uint64_t total );
         inline void updatePercentF ( const std::string &title, uint64_t &done, uint64_t &lastdone, uint64_t delta, uint64_t doneStep, dim_t index, dim_t count );
         void generateConnectionMap ( void );
+        int ErrorNotFoundPlookupValue(dim_t index, const std::string &value, omega_t w);
+        int ErrorPermutationValue(dim_t index, const std::string &value, omega_t w, PermutationError e);
 };
 
 }

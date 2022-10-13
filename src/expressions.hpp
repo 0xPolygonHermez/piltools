@@ -44,7 +44,8 @@ class Expressions {
         Expressions (Engine &engine);
         ~Expressions ( void );
         bool isZero(uid_t id);
-        inline std::string valuesToBinString(uid_t *values, dim_t size, omega_t w) { return valuesToBinRaw(values, size, w); }
+        std::string valuesToBinString(uid_t *values, dim_t size, omega_t w);
+        std::string valuesBinToString(const std::string &values);
         std::string valuesToString(uid_t *values, dim_t size, omega_t w);
         void setEvaluations(FrElement *evaluations);
         dim_t getEvaluationsSize (void) { return (uint64_t)count * (uint64_t)n * sizeof(FrElement); };
@@ -59,11 +60,6 @@ class Expressions {
         void resetGroups (void);
         void mergeGroup (uid_t toId, uid_t fromId);
         void recursiveSetGroup (uid_t exprId, uid_t groupId);
-        std::string valuesToBinPseudoB64(uid_t *values, dim_t size, omega_t w);
-        std::string valuesToBinHex(uid_t *values, dim_t size, omega_t w);
-        std::string valuesToNine(uid_t *values, dim_t size, omega_t w);
-        std::string valuesToBinPackZero(uid_t *values, dim_t size, omega_t w);
-        std::string valuesToBinRaw(uid_t *values, dim_t size, omega_t w);
 };
 
 }
