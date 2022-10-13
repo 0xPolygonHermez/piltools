@@ -14,7 +14,7 @@ endif
 #CXX := mpiCC
 #LDFLAGS := -lpthread -lgmp -lstdc++ -lomp -lgmpxx -lbenchmark -L$(LIBOMP) -Wno-unknown-pragmas
 
-CFLAGS  = -ggdb3 -O3 -Wall -std=c++17 -I goldilocks/src -pthread -fopenmp
+CFLAGS  = -ggdb3 -O3 -Wall -std=c++17 -I goldilocks/src -pthread -fopenmp -D__OVERLOAD_POLS__
 LDFLAGS  = -lpthread -lgmp -lgmpxx -lomp -L$(LIBOMP)
 
 # The build target

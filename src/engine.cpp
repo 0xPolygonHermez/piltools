@@ -68,7 +68,7 @@ void *Engine::mapFile(const std::string &filename, dim_t size, bool wr )
     }
 
     std::cout << "mapping file " << filename << " with " << size << " bytes" << std::endl;
-    void *maddr = mmap(NULL, size, wr ? PROT_WRITE:PROT_READ, MAP_PRIVATE, fd, 0);
+    void *maddr = mmap(NULL, size, wr ? (PROT_WRITE|PROT_READ):PROT_READ, wr ? MAP_SHARED:MAP_PRIVATE, fd, 0);
     close(fd);
     assert(maddr != MAP_FAILED);
 
@@ -88,6 +88,7 @@ void Engine::unmap (void *addr)
 void Engine::unmapAll (void)
 {
     for (auto it = mappings.begin(); it != mappings.end(); ++it) {
+        msync(it->first, it->second, MS_SYNC);
         munmap(it->first, it->second);
     }
     mappings.clear();
@@ -289,12 +290,12 @@ void Engine::checkPlookupIdentities (void)
 
     prepareT(identities, "Plookup", [tt, tCount](dim_t index, const std::string &value) { ++tCount[index]; tt[index].insert(value); return 0; });
     verifyF(identities, "Plookup", [tt, fCount](dim_t index, const std::string &value) { ++fCount[index]; return tt[index].count(value); });
+    Tools::endCronoAndShowIt(startT);
     for (dim_t index = 0; index < identitiesCount; ++index) {
         const std::string selector = identities[index]["selT"].is_null() ? "(none)":expressions.getName(identities[index]["selT"]);
-        printf("%-40s|%20s|%10ld|%20s|%10ld\n", (((std::string)identities[index]["fileName"])+ ":" +std::to_string((uint)(identities[index]["line"]))).c_str(),
-            selector.c_str(), (uint64_t)tCount[index], "", (uint64_t)fCount[index]);
+        printf("%-40s|%20s|%10ld|%20s|%10ld|%10ld\n", (((std::string)identities[index]["fileName"])+ ":" +std::to_string((uint)(identities[index]["line"]))).c_str(),
+            selector.c_str(), (uint64_t)tCount[index], "", (uint64_t)fCount[index], (uint64_t)tt[index].size());
     }
-    Tools::endCronoAndShowIt(startT);
     delete [] tt;
 }
 
@@ -346,7 +347,6 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, GetF
         dim_t fCount = identity["f"].size();
         uid_t fs[fCount];
 
-
         for (uid_t index = 0; index < fCount; ++index) {
             fs[index] = identity["f"][index];
         }
@@ -359,7 +359,10 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, GetF
             for (omega_t w = w1; w < w2; ++w) {
                 if (hasSelF && Goldilocks::isZero(expressions.getEvaluation(selF, w))) continue;
                 if (get(identityIndex, expressions.valuesToBinString(fs, fCount, w)) == 0 ) {
-                    std::cerr << "problem on " << label << " #" << identityIndex << " " << location << " w:" << w << " not found " << expressions.valuesToString(fs, fCount, w) << std::endl;
+                    #pragma omp critical
+                    {
+                        std::cerr << "problem on " << label << " #" << identityIndex << " " << location << " w:" << w << " not found " << expressions.valuesToString(fs, fCount, w) << std::endl;
+                    }
                 }
             }
             updatePercentF(label, done, lastdone, w2-w1, doneStep, identityIndex, identitiesCount);
@@ -622,6 +625,11 @@ bool Engine::checkFilename (const std::string &filename, bool toWrite, bool exce
         std::cerr << msg << std::endl;
     }
     return result;
+}
+
+void Engine::generateConnectionMap ( void )
+{
+
 }
 
 }

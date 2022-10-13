@@ -98,6 +98,7 @@ class Engine {
         void verifyF (nlohmann::json& identities, const std::string &label, GetFunc get);
         inline void updatePercentT ( const std::string &title, uint64_t &done, uint64_t total );
         inline void updatePercentF ( const std::string &title, uint64_t &done, uint64_t &lastdone, uint64_t delta, uint64_t doneStep, dim_t index, dim_t count );
+        void generateConnectionMap ( void );
 };
 
 }

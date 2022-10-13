@@ -61,10 +61,11 @@ int main ( int argc, char *argv [])
     pil::Engine engine({
         pilJsonFilename: pilJsonFilename,
         constFilename: constFilename,
-        commitFilename: commitFilename,
+        // commitFilename: commitFilename,
+        commitFilename: basePath + "zkevm.fake.commit",
         loadExpressions: true,
 //        saveExpressions: true,
-        expressionsFilename: basePath + "zkevm.expr.bypols.bin"
+        expressionsFilename: basePath + "zkevm.fake.expr.bypols.bin"
     });
     // engine.getEvaluation("Main.STEP", 10);
     // engine.getEvaluation("Arith.x1", 12, 3);
