@@ -28,4 +28,16 @@ std::string Tools::percentBar (uint64_t n, uint64_t total, bool percent, const s
     return res;
 }
 
+
+uint64_t Tools::u64Log2 ( uint64_t value )
+{
+    uint64_t upto = 1;
+    uint64_t log = 0;
+    while (value > upto) {
+        ++log;
+        if (upto >= 0x8000000000000000UL) break;
+        upto *= 2;
+    }
+    return log;
+}
 }

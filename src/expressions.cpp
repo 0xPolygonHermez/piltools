@@ -29,8 +29,11 @@ std::string Expressions::getName (uid_t expressionId)
             case OperationValueType::CONST:  return engine.getConstName(id);
             case OperationValueType::CM:     return engine.getCommitedName(id);
             case OperationValueType::PUBLIC:  return engine.getPublicName(id);
+            default:
+                if (vtype != OperationValueType::EXP) return "";
+                break;
         }
-        if (vtype != OperationValueType::EXP) return "";
+
     }
     return ""; // getTextFormula(id);
 }
@@ -289,7 +292,7 @@ void Expressions::afterEvaluationsLoaded (void)
 void Expressions::evalAllCpuGroup (uid_t icpu, uint64_t &done)
 {
     dim_t depCount = dependencies.size();
-    for (int idep = 0; idep < depCount; ++idep) {
+    for (uint idep = 0; idep < depCount; ++idep) {
         const uid_t iexpr = dependencies[idep];
         if (std::find(cpuGroups[icpu].begin(), cpuGroups[icpu].end(), expressions[iexpr].groupId) == cpuGroups[icpu].end()) continue;
 

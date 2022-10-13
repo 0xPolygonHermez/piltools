@@ -32,6 +32,8 @@ class Tools {
             return ms;
         };
         static std::string percentBar (uint64_t n, uint64_t total = 100, bool percent = true, const std::string &ansi = "\x1B[1;32m");
+
+        static uint64_t u64Log2 ( uint64_t value );
 };
 
 }

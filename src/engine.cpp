@@ -19,6 +19,7 @@
 #include "expression.hpp"
 #include "reference.hpp"
 #include "tools.hpp"
+#include "connection_map.hpp"
 
 namespace pil {
 
@@ -39,10 +40,10 @@ Engine::Engine(EngineOptions options)
     loadAndCompileExpressions();
     calculateAllExpressions();
 
-    checkPolIdentities();
-    checkPlookupIdentities();
-    checkPermutationIdentities();
-    // checkConnectionIdentities();
+    // checkPolIdentities();
+    // checkPlookupIdentities();
+    // checkPermutationIdentities();
+    checkConnectionIdentities();
     std::cout << "done" << std::endl;
 }
 
@@ -52,7 +53,9 @@ void *Engine::mapFile(const std::string &filename, dim_t size, bool wr )
 
     if (wr) {
         fd = open(filename.c_str(), O_RDWR|O_CREAT, 0666);
-        ftruncate(fd, size);
+        if (ftruncate(fd, size) < 0) {
+            throw std::runtime_error("Error on trucate of mapping(wr) "+filename);
+        }
     } else {
         fd = open(filename.c_str(), O_RDONLY);
     }
@@ -266,18 +269,58 @@ void Engine::loadAndCompileExpressions (void)
 void Engine::checkConnectionIdentities (void)
 {
     std::cout << "connectionIdentities ....." << std::endl;
+    uint nk = getMaxConnectionColumns();
+    std::cout << "nk:" << nk << std::endl;
+    ConnectionMap cm(n, nk);
+
     auto connectionIdentities = pil["connectionIdentities"];
     for (auto it = connectionIdentities.begin(); it != connectionIdentities.end(); ++it) {
-        for (auto ipols = (*it)["pols"].begin(); ipols != (*it)["pols"].end(); ++ipols) {
-            uid_t id = *ipols;
+        std::cout << "connection " << (*it)["fileName"] << ":" << (*it)["line"] << std::endl;
+        assert((*it)["pols"].size() == (*it)["connections"].size());
+        dim_t polsCount = (*it)["pols"].size();
+        uid_t pols[polsCount];
+        uid_t connections[polsCount];
+
+        for (uid_t index = 0; index < polsCount; ++index) {
+            pols[index] = (*it)["pols"][index];
+            connections[index] = (*it)["connections"][index];
         }
-        for (auto iconnections = (*it)["connections"].begin(); iconnections != (*it)["connections"].end(); ++iconnections) {
-            uid_t id = *iconnections;
+        uint chunks = 64;
+        omega_t wchunk = n / chunks;
+        #pragma omp parallel for
+        for (uint chunk = 0; chunk < chunks; ++chunk) {
+            omega_t w1 = chunk * wchunk;
+            omega_t w2 = (chunk == (chunks - 1)) ? n: w1 + wchunk;
+            for (omega_t w = w1; w < w2; ++w) {
+                for (uid_t j = 0; j < polsCount; ++j) {
+                    auto v1 = expressions.getEvaluation(pols[j], w);
+                    auto a = Goldilocks::toU64(expressions.getEvaluation(connections[j], w));
+                    uint64_t _ij = cm.get(a);
+                    uint64_t _i = cm.ij2i(_ij);
+                    uint64_t _j = cm.ij2j(_ij);
+                    auto v2 = expressions.getEvaluation(pols[_j], _i);
+                    if (!Goldilocks::equal(v1, v2)) {
+                        std::cout << "MAMA,MIA !!" << std::endl;
+                    }
+                }
+            }
         }
     }
 }
 
-int Engine::ErrorNotFoundPlookupValue(dim_t index, const std::string &value, omega_t w)
+
+uint Engine::getMaxConnectionColumns (void)
+{
+    uint maxPolsCount = 0;
+    auto connectionIdentities = pil["connectionIdentities"];
+    for (auto it = connectionIdentities.begin(); it != connectionIdentities.end(); ++it) {
+        const uint polsCount = (*it)["pols"].size();
+        if (polsCount > maxPolsCount) maxPolsCount = polsCount;
+    }
+    return maxPolsCount;
+}
+
+int Engine::onErrorNotFoundPlookupValue(dim_t index, const std::string &value, omega_t w)
 {
     const std::string location = (std::string)(pil["plookupIdentities"][index]["fileName"]) + ":" + std::to_string((uint)(pil["plookupIdentities"][index]["line"]));
     std::stringstream ss;
@@ -304,7 +347,7 @@ void Engine::checkPlookupIdentities (void)
     verifyF(identities, "Plookup", [tt, fCount,this](dim_t index, const std::string &value, omega_t w) {
                                                                         ++fCount[index];
                                                                         int result = tt[index].count(value);
-                                                                        if (result == 0) result = ErrorNotFoundPlookupValue(index, value, w);
+                                                                        if (result == 0) result = onErrorNotFoundPlookupValue(index, value, w);
                                                                         return result; });
     Tools::endCronoAndShowIt(startT);
 
@@ -327,7 +370,7 @@ void Engine::checkPlookupIdentities (void)
     Tools::endCronoAndShowIt(startT);
 }
 
-int Engine::ErrorPermutationValue(dim_t index, const std::string &value, omega_t w, PermutationError e)
+int Engine::onErrorPermutationValue(dim_t index, const std::string &value, omega_t w, PermutationError e)
 {
     const std::string location = (std::string)(pil["permutationIdentities"][index]["fileName"]) + ":" + std::to_string((uint)(pil["permutationIdentities"][index]["line"]));
     std::stringstream ss;
@@ -366,16 +409,16 @@ void Engine::checkPermutationIdentities (void)
     verifyF(identities, "Permutation", [tt, this](dim_t index, const std::string &value, omega_t w) {
                                                                                      auto it = tt[index].find(value);
                                                                                      if (it == tt[index].end()) {
-                                                                                        return ErrorPermutationValue(index, value, w, PermutationError::notFound);
+                                                                                        return onErrorPermutationValue(index, value, w, PermutationError::notFound);
                                                                                      }
                                                                                      if (it->second > 0) {
                                                                                         --it->second;
                                                                                         return 1;
                                                                                      }
-                                                                                     return ErrorPermutationValue(index, value, w, PermutationError::notEnought);});
+                                                                                     return onErrorPermutationValue(index, value, w, PermutationError::notEnought);});
     for (dim_t index = 0; index < identitiesCount; ++index) {
         for (auto it = tt[index].begin(); it != tt[index].end(); ++it) {
-            if (it->second > 0 && ErrorPermutationValue(index, it->first, it->second, PermutationError::remainingValues) == 0) {
+            if (it->second > 0 && onErrorPermutationValue(index, it->first, it->second, PermutationError::remainingValues) == 0) {
                 break;
             }
         }
@@ -423,7 +466,6 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, Chec
     uint64_t done = 0;
 
     const uint64_t doneStep = n / 20;
-    const uint64_t totaln = n * identitiesCount;
     #pragma omp parallel for
     for (dim_t identityIndex = 0; identityIndex < identitiesCount; ++identityIndex) {
         const std::string plabel = label + "[" + std::to_string(identityIndex+1) + "/" + std::to_string(identitiesCount) + "] ";
@@ -601,11 +643,6 @@ bool Engine::checkFilename (const std::string &filename, bool toWrite, bool exce
         std::cerr << msg << std::endl;
     }
     return result;
-}
-
-void Engine::generateConnectionMap ( void )
-{
-
 }
 
 }
