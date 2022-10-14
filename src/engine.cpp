@@ -20,12 +20,15 @@
 #include "reference.hpp"
 #include "tools.hpp"
 #include "connection_map.hpp"
+#include "block.hpp"
 
 namespace pil {
 
 Engine::Engine(EngineOptions options)
     :constRefs(ReferenceType::constP), cmRefs(ReferenceType::cmP), imRefs(ReferenceType::imP), expressions(*this), options(options)
 {
+    Block::init();
+
     n = 0;
     nCommitments = 0;
     nConstants = 0;
@@ -40,14 +43,14 @@ Engine::Engine(EngineOptions options)
     loadAndCompileExpressions();
     calculateAllExpressions();
 
-    // checkPolIdentities();
-    // checkPlookupIdentities();
-    // checkPermutationIdentities();
+    checkPolIdentities();
+    checkPlookupIdentities();
+    checkPermutationIdentities();
     checkConnectionIdentities();
-    std::cout << "done" << std::endl;
+    std::cout << "done in " << Block::getTotalTime() << " ms" << std::endl;
 }
 
-void *Engine::mapFile(const std::string &filename, dim_t size, bool wr )
+void *Engine::mapFile(const std::string &title, const std::string &filename, dim_t size, bool wr )
 {
     int fd;
 
@@ -70,7 +73,7 @@ void *Engine::mapFile(const std::string &filename, dim_t size, bool wr )
         size = sb.st_size;
     }
 
-    std::cout << "mapping file " << filename << " with " << size << " bytes" << std::endl;
+    std::cout << "mapping " << title << " file " << filename << " with " << Tools::humanSize(size) << std::endl;
     void *maddr = mmap(NULL, size, wr ? (PROT_WRITE|PROT_READ):PROT_READ, wr ? MAP_SHARED:MAP_PRIVATE, fd, 0);
     close(fd);
     assert(maddr != MAP_FAILED);
@@ -117,6 +120,7 @@ FrElement Engine::getEvaluation(const std::string &name, omega_t w, index_t inde
 
 void Engine::calculateAllExpressions (void)
 {
+    Block block("Calculate expressions");
     expressions.calculateGroup();
     if (options.loadExpressions || options.saveExpressions) {
         mapExpressionsFile(options.saveExpressions);
@@ -144,22 +148,19 @@ void Engine::loadJsonPil (void)
 
 void Engine::loadConstantsFile (void)
 {
-    std::cout << "mapping constant file " << options.constFilename << std::endl;
-    constPols = (FrElement *)mapFile(options.constFilename);
+    constPols = (FrElement *)mapFile("constant", options.constFilename);
     constRefs.map(constPols);
 }
 
 void Engine::loadCommitedFile (void)
 {
-    std::cout << "mapping commited file " << options.commitFilename << std::endl;
-    cmPols = (FrElement *)mapFile(options.commitFilename);
+    cmPols = (FrElement *)mapFile("commited", options.commitFilename);
     cmRefs.map(cmPols);
 }
 
 void Engine::mapExpressionsFile (bool wr)
 {
-    std::cout << "mapping constant file " << options.expressionsFilename << std::endl;
-    expressions.setEvaluations((FrElement *)mapFile(options.expressionsFilename, expressions.getEvaluationsSize(), wr));
+    expressions.setEvaluations((FrElement *)mapFile("expression", options.expressionsFilename, expressions.getEvaluationsSize(), wr));
 }
 
 ReferenceType Engine::getReferenceType (const std::string &name, const std::string &type)
@@ -172,9 +173,7 @@ ReferenceType Engine::getReferenceType (const std::string &name, const std::stri
 
 void Engine::loadReferences (void)
 {
-    for (nlohmann::json::iterator it = pil.begin(); it != pil.end(); ++it) {
-        std::cout << it.key() << "\n";
-    }
+    Block block("Loading references");
     nConstants = pil["nConstants"];
     nCommitments = pil["nCommitments"];
     auto pilReferences = pil["references"];
@@ -223,10 +222,9 @@ void Engine::loadReferences (void)
         }
     }
 
-    std::cout << "size:" << pilReferences.size() << "\n";
-    std::cout << "max:" << max << "\n";
-    std::cout << "nConstants:" << nConstants << " nCommitments:"  << nCommitments << " total:" << (nConstants+nCommitments) << "\n";
-    std::cout << "expressions:" << pil["expressions"].size() << std::endl;
+    std::cout << "References: " << pilReferences.size() << "  (max id:" << max << ")" << std::endl;
+    std::cout << "nConstants: " << nConstants << "  nCommitments: "  << nCommitments << "  TOTAL: " << (nConstants+nCommitments) << std::endl;
+    std::cout << "Expressions: " << pil["expressions"].size() << std::endl;
 }
 
 void Engine::loadPublics (void)
@@ -238,7 +236,7 @@ void Engine::loadPublics (void)
         index_t idx = (*it)["idx"];
         uid_t id = (*it)["id"];
         std::string polType = (*it)["polType"];
-        // std::cout << "name:" << *it << " value:" << std::endl;
+
         auto type = getReferenceType(name, polType);
         FrElement value;
         switch(type) {
@@ -248,7 +246,7 @@ void Engine::loadPublics (void)
             case ReferenceType::imP:
                 // TODO: calculateValues
                 // value = imRefs.getPolValue(polId, idx);
-                break;
+                throw std::runtime_error("imP reference "+name+" not supported yet");
             default:
                 throw std::runtime_error("Invalid type "+polType+" for public "+name);
         }
@@ -263,14 +261,14 @@ void Engine::loadAndCompileExpressions (void)
     #ifdef __DEBUG__
     expressions.dumpDependencies();
     #endif
-    // reduceNumberAliasExpressions();
 }
 
 void Engine::checkConnectionIdentities (void)
 {
-    std::cout << "connectionIdentities ....." << std::endl;
+    Block block("Connections");
+
     uint nk = getMaxConnectionColumns();
-    std::cout << "nk:" << nk << std::endl;
+    std::cout << "Columns(max): " << nk << std::endl;
     ConnectionMap cm(n, nk);
 
     auto connectionIdentities = pil["connectionIdentities"];
@@ -334,7 +332,8 @@ int Engine::onErrorNotFoundPlookupValue(dim_t index, const std::string &value, o
 
 void Engine::checkPlookupIdentities (void)
 {
-    std::cout << "plookupIdentities ....." << std::endl;
+    Block block("Plookups");
+
     auto identities = pil["plookupIdentities"];
     const dim_t identitiesCount = identities.size();
     auto tt = new std::unordered_set<std::string>[identitiesCount];
@@ -366,7 +365,6 @@ void Engine::checkPlookupIdentities (void)
         if (index > identitiesCount) delete [] fCount;
     }
     delete [] tt;
-    std::cout << "end to delete" << std::endl;
     Tools::endCronoAndShowIt(startT);
 }
 
@@ -388,16 +386,12 @@ int Engine::onErrorPermutationValue(dim_t index, const std::string &value, omega
     return 0;
 }
 
-
-
 void Engine::checkPermutationIdentities (void)
 {
-    std::cout << "permutationIdentities ....." << std::endl;
+    Block block("Permutations checks");
     auto identities = pil["permutationIdentities"];
     const dim_t identitiesCount = identities.size();
     auto tt = new std::unordered_map<std::string, int64_t>[identitiesCount];
-
-    auto startT = Tools::startCrono();
 
     prepareT(identities, "Permutation", [tt](dim_t index, const std::string &value) { auto it = tt[index].find(value);
                                                                                       if (it == tt[index].end()) {
@@ -423,7 +417,14 @@ void Engine::checkPermutationIdentities (void)
             }
         }
     }
-    Tools::endCronoAndShowIt(startT);
+
+/*
+    for (dim_t index = 0; index < identitiesCount; ++index) {
+        const std::string selector = identities[index]["selT"].is_null() ? "(none)":expressions.getName(identities[index]["selT"]);
+        printf("%-40s|%20s|%10ld|%20s|%10ld|%10ld\n", (((std::string)identities[index]["fileName"])+ ":" +std::to_string((uint)(identities[index]["line"]))).c_str(),
+            selector.c_str(), (uint64_t)tCount[index], "", (uint64_t)fCount[index], (uint64_t)tt[index].size());
+    }*/
+
     #pragma omp parallel for
     for (dim_t index = 0; index < identitiesCount; ++index) {
         if (index < identitiesCount) tt[index].clear();
@@ -535,6 +536,7 @@ inline void Engine::updatePercentF ( const std::string &title, uint64_t &done, u
 
 void Engine::checkPolIdentities (void)
 {
+    Block block("Identities");
     auto polIdentities = pil["polIdentities"];
     dim_t polIdentitiesCount = polIdentities.size();
     dim_t errorCount = 0;
@@ -560,7 +562,7 @@ void Engine::checkPolIdentities (void)
 
 bool Engine::verifyExpressionsWithFile (void)
 {
-    uint64_t *exprs = (uint64_t *)mapFile(options.expressionsVerifyFilename);
+    uint64_t *exprs = (uint64_t *)mapFile("verify", options.expressionsVerifyFilename);
 
     uint differences = 0;
     const uint maxDifferences = 2000;

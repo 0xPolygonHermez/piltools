@@ -16,6 +16,8 @@
 #include "engine.hpp"
 #include "fr_element.hpp"
 #include "types.hpp"
+#include "tools.hpp"
+#include "block.hpp"
 
 namespace pil {
 
@@ -251,27 +253,54 @@ void Expressions::debugEval(uid_t expressionId, omega_t w)
     expressions[expressionId].eval(engine, w, true);
 }
 
+void Expressions::updatePercentEvaluated (uint incDone)
+{
+    #pragma omp critical
+    {
+        if (incDone) evaluationsDone += incDone;
+        std::cout << "Evaluating expressions " << Tools::percentBar(evaluationsDone, count, false) << " " << evaluationsDone << "/" << count << " (cpus:" << activeCpus << ")    \t\r" << std::flush;
+    }
+}
+
 void Expressions::evalAll(void)
 {
     if (evaluations == NULL) {
-        std::cout << "creating evaluations " << count * engine.n << "(" << count << "*" << engine.n << ") size:" <<  (count * engine.n * sizeof(FrElement)) << std::endl;
+        std::cout << "Allocating " << Tools::humanSize(count * (uint64_t)n * sizeof(FrElement)) << " for " << count << " expressions" << std::endl;
         evaluations = new FrElement[count * (uint64_t)n];
     }
-    struct timeval time_now;
-    gettimeofday(&time_now, nullptr);
-    time_t startT = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
 
-    // std::cout << "omp_get_max_threads: " << omp_get_max_threads() << std::endl;
-    uint64_t done = 0;
+    uint64_t cpuTimes[cpus];
+    evaluationsDone = 0;
+    activeCpus = cpus;
+    updatePercentEvaluated();
+
+    uint64_t startT = Tools::startCrono();
     #pragma omp parallel for
     for (uint icpu = 0; icpu < cpus; ++icpu) {
-        evalAllCpuGroup(icpu, done);
+        evalAllCpuGroup(icpu);
+        cpuTimes[icpu] = Tools::endCrono(startT);
+        #pragma omp critical
+        {
+            --activeCpus;
+        }
     }
-    expandAlias();
 
-    gettimeofday(&time_now, nullptr);
-    time_t endT = (time_now.tv_sec * 1000) + (time_now.tv_usec / 1000);
-    std::cout << "time(ms):" <<  (endT - startT) << std::endl;
+    uint64_t maxTime = 0;
+    uint64_t totalTime = 0;
+    for (uint icpu = 0; icpu < cpus; ++icpu) {
+        if (cpuTimes[icpu] > maxTime) maxTime = cpuTimes[icpu];
+        totalTime += cpuTimes[icpu];
+    }
+
+    std::cout << std::endl << std::flush;
+    std::cout << "--- CPU STATISTICS ---" << std::endl;
+    for (uint icpu = 0; icpu < cpus; ++icpu) {
+        printf("CPU %3lu [G:%4lu] %s\n", icpu, cpuGroups[icpu].size(), Tools::percentBar(cpuTimes[icpu], maxTime).c_str());
+    }
+    printf("CPU usage: %0.2f%%  ms: %lu  goal: %lu\n", ((double)totalTime * 100.0)/((double)maxTime * cpus), maxTime, totalTime/cpus);
+    std::cout << "CPU usage: --- CPU STATISTICS ---" << std::endl;
+
+    expandAlias();
 }
 
 void Expressions::afterEvaluationsLoaded (void)
@@ -289,24 +318,18 @@ void Expressions::afterEvaluationsLoaded (void)
     }
 }
 
-void Expressions::evalAllCpuGroup (uid_t icpu, uint64_t &done)
+
+void Expressions::evalAllCpuGroup (uid_t icpu)
 {
     dim_t depCount = dependencies.size();
     for (uint idep = 0; idep < depCount; ++idep) {
         const uid_t iexpr = dependencies[idep];
         if (std::find(cpuGroups[icpu].begin(), cpuGroups[icpu].end(), expressions[iexpr].groupId) == cpuGroups[icpu].end()) continue;
-
-        #pragma omp critical
-        {
-            std::cout << "[" << icpu <<"] CPU (E:" << iexpr << ") " << idep << "/" << depCount << std::endl;
-        }
-
-        // for (omega_t w = 0; w < engine.n; ++w) {
         for (omega_t w = 0; w < n; ++w) {
             evaluations[ (uint64_t)n * iexpr + w ] = expressions[iexpr].eval(engine, w, iexpr == 222288);
         }
         expressions[iexpr].evaluated = true;
-
+        updatePercentEvaluated(1);
         #ifdef __DEBUG__
         // std::cout << "expression[" << iexpr << "] evaluated" << std::endl;
         #endif
@@ -320,7 +343,7 @@ Expressions::Expressions (Engine &engine)
     expressions = NULL;
     externalEvaluations = false;
     checkEvaluated = true;
-    cpus = 64;
+    cpus = omp_get_max_threads();
     cpuGroups = new std::list<uid_t>[cpus];
 }
 
@@ -376,24 +399,6 @@ void Expressions::calculateGroup (void)
         ++groupId;
     }
 
-/*    const dim_t depCount = dependencies.size();
-    for (int64_t idep = depCount - 1; idep >= 0; --idep) {
-        const dim_t id = dependencies[idep];
-        const uid_t groupId = expressions[id].groupId;
-        const dim_t depCount2 = expressions[id].dependencies.size();
-        for (dim_t idep2 = 0; idep2 < depCount2; ++idep2) {
-            expressions[expressions[id].dependencies[idep2]].groupId = groupId;
-        }
-    }
-    for (int64_t idep = 0; idep < depCount; ++idep) {
-        const dim_t id = dependencies[idep];
-        const uid_t groupId = expressions[id].groupId;
-        const dim_t depCount2 = expressions[id].dependencies.size();
-        for (dim_t idep2 = 0; idep2 < depCount2; ++idep2) {
-            expressions[expressions[id].dependencies[idep2]].groupId = groupId;
-        }
-    }*/
-
     dim_t *groupCounters = new dim_t[count]();
     bool *groupHasNextExpressions = new bool[count]();
 
@@ -415,15 +420,8 @@ void Expressions::calculateGroup (void)
     }
     groupsBySizeDesc.sort( [groupCounters]( const uid_t &a, const uid_t &b ) { return groupCounters[a] > groupCounters[b]; } );
 
-    std::cout << "groups:" << groupsWithElements << std::endl;
-    uint total = 0;
-    for (auto it = groupsBySizeDesc.begin(); it != groupsBySizeDesc.end(); ++it) {
-        total += groupCounters[*it];
-    }
     dim_t *cpuGroupSizes = new dim_t[cpus]();
-
     dim_t cpuGroupSizeTarget = (count / cpus) + ((count % cpus) != 0);
-    std::cout << "cpuGroupSizeTarget:" << cpuGroupSizeTarget << std::endl;
     auto it = groupsBySizeDesc.begin();
 
     // TODO: if no next expressions => split in n parts the big groups
@@ -439,13 +437,11 @@ void Expressions::calculateGroup (void)
         }
     }
     uint totalGroups = 0;
-    total = 0;
     for (uint icpu = 0; icpu < cpus; ++icpu) {
         totalGroups += cpuGroups[icpu].size();
-        total += cpuGroupSizes[icpu];
-        // std::cout << "CPU " << icpu << " G:" << cpuGroups[icpu].size() << " E:" << cpuGroupSizes[icpu] << std::endl;
     }
-    std::cout << "totalGroups:" << totalGroups << std::endl;
+    std::cout << "Calculated dependencies groups (cpus:" << cpus << ")" << std::endl;
+    std::cout << "Groups(we): " << groupsWithElements << "  cpuGroupSizeTarget: " << cpuGroupSizeTarget << "  totalGroups: " << totalGroups << std::endl;
 
     delete [] groupCounters;
     delete [] cpuGroupSizes;

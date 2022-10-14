@@ -1,6 +1,7 @@
 #ifndef __PIL__ENGINE__HPP__
 #define __PIL__ENGINE__HPP__
 
+#include <stack>
 #include <stdint.h>
 #include <nlohmann/json.hpp>
 #include <goldilocks_base_field.hpp>
@@ -15,6 +16,7 @@ namespace pil {
 #include "types.hpp"
 #include "operation.hpp"
 #include "dependencies.hpp"
+#include "tools.hpp"
 
 namespace pil {
 
@@ -30,6 +32,8 @@ class EngineOptions {
         std::string expressionsFilename = "";
         std::string expressionsVerifyFilename = "";
         EvaluationMapMode expressionsVerifyFileMode = EvaluationMapMode::BY_OMEGAS;
+        bool verbose;
+        std::string sourcePath;
 };
 
 class Engine {
@@ -68,6 +72,7 @@ class Engine {
     protected:
         nlohmann::json pil;
         std::map<void *,size_t> mappings;
+        std::stack<uint64_t> blockTs;
 
         void checkOptions (void);
 
@@ -82,14 +87,14 @@ class Engine {
         void checkPolIdentities (void);
         void checkPlookupIdentities (void);
         void checkPermutationIdentities (void);
-        const FrElement calculateExpression(uid_t id);
-        ReferenceType getReferenceType(const std::string &name, const std::string &type);
-        void precompileExpression(nlohmann::json& node);
+        const FrElement calculateExpression (uid_t id);
+        ReferenceType getReferenceType (const std::string &name, const std::string &type);
+        void precompileExpression (nlohmann::json& node);
         void loadAndCompileExpressions (void);
         void calculateAllExpressions (void);
         bool verifyExpressionsWithFile (void);
 
-        void *mapFile(const std::string &filename, dim_t size = 0, bool wr = false);
+        void *mapFile (const std::string &title, const std::string &filename, dim_t size = 0, bool wr = false);
         void unmap (void *);
         void unmapAll (void);
         bool checkFilename (const std::string &filename, bool toWrite = false, bool exceptionOnFail = false);
@@ -100,8 +105,8 @@ class Engine {
         inline void updatePercentT ( const std::string &title, uint64_t &done, uint64_t total );
         inline void updatePercentF ( const std::string &title, uint64_t &done, uint64_t &lastdone, uint64_t delta, uint64_t doneStep, dim_t index, dim_t count );
         void generateConnectionMap ( void );
-        int onErrorNotFoundPlookupValue(dim_t index, const std::string &value, omega_t w);
-        int onErrorPermutationValue(dim_t index, const std::string &value, omega_t w, PermutationError e);
+        int onErrorNotFoundPlookupValue (dim_t index, const std::string &value, omega_t w);
+        int onErrorPermutationValue (dim_t index, const std::string &value, omega_t w, PermutationError e);
         uint getMaxConnectionColumns (void);
 };
 

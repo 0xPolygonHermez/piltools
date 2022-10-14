@@ -40,4 +40,25 @@ uint64_t Tools::u64Log2 ( uint64_t value )
     }
     return log;
 }
+
+std::string Tools::humanSize ( uint64_t size )
+{
+    char output[200];
+    double unitSize;
+    static const uint64_t dimension[5] = {1000000000000ULL, 1000000000ULL, 1000000ULL, 1000, 1};
+    static const char *units[5] = {"TB", "GB", "MB", "KB", "bytes"};
+    uint index;
+    for (index = 0; index < 4; ++index) {
+        if (size > dimension[index]) break;
+    }
+    unitSize = (double)size / dimension[index];
+    if (unitSize > 50 || dimension[index] == 1) {
+        snprintf(output, sizeof(output), "%u %s", (uint) unitSize, units[index]);
+    }
+    else {
+        snprintf(output, sizeof(output), "%0.2f %s", unitSize, units[index]);
+    }
+    return output;
+}
+
 }

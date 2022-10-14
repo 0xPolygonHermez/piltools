@@ -1,3 +1,4 @@
+#include "debug.hpp"
 #include "operation_value.hpp"
 #include "engine.hpp"
 #include "fr_element.hpp"
@@ -34,23 +35,23 @@ FrElement OperationValue::eval(Engine &engine, omega_t w, uid_t evalGroupId, boo
     w = engine.next(w + next);
     switch(type) {
         case OperationValueType::CONST: {
-            if (debug) std::cout << "  getConst [" << engine.getConstName(value.id) << "] (" << value.id << "," << w << ")" << std::endl;
+            DEBUG_IF(debug, "  getConst [" << engine.getConstName(value.id) << "] (" << value.id << "," << w << ")");
             return engine.getConst(value.id, w);
         }
         case OperationValueType::CM: {
-            if (debug) std::cout << "  getCommited [" << engine.getCommitedName(value.id) << "] (" << value.id << "," << w << ")" << std::endl;
+            DEBUG_IF(debug, "  getCommited [" << engine.getCommitedName(value.id) << "] (" << value.id << "," << w << ")");
             return engine.getCommited(value.id, w);
         }
         case OperationValueType::PUBLIC: {
-            if (debug) std::cout << "  getPublic [" << engine.getPublicName(value.id) << "] (" << value.id << "," << w << ")" << std::endl;
+            DEBUG_IF(debug, "  getPublic [" << engine.getPublicName(value.id) << "] (" << value.id << "," << w << ")");
             return engine.getPublic(value.id, w);
         }
         case OperationValueType::EXP: {
-            if (debug) std::cout << "  getExpression (" << value.id << "," << w << ")" << std::endl;
+            DEBUG_IF(debug, "  getExpression (" << value.id << "," << w << ")");
             return engine.getExpression(value.id, w, evalGroupId);
         }
         case OperationValueType::NUMBER: {
-            if (debug) std::cout << "  number " << Goldilocks::toU64(value.f) << std::endl;
+            DEBUG_IF(debug, "  number " << Goldilocks::toU64(value.f));
             return value.f;
         }
         case OperationValueType::OP:
@@ -66,6 +67,6 @@ FrElement OperationValue::eval(Engine &engine, omega_t w, uid_t evalGroupId, boo
 
 std::ostream& operator << (std::ostream& os, const pil::OperationValueType &obj)
 {
-   os << static_cast<std::underlying_type<pil::OperationValueType>::type>(obj);
-   return os;
+    os << static_cast<std::underlying_type<pil::OperationValueType>::type>(obj);
+    return os;
 }

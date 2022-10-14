@@ -35,7 +35,7 @@ class Expressions {
         uint replaceOperationValue (OperationValueType oldValueType, uint64_t oldValue, OperationValueType newValueType, uint64_t newValue);
         void loadAndCompile (nlohmann::json &pilExpressions);
         void evalAll (void);
-        void evalAllCpuGroup(uid_t icpu, uint64_t &done);
+        void evalAllCpuGroup(uid_t icpu);
         void debugEval (uid_t expressionId, omega_t w = 0);
         void dumpExpression (uid_t expressionId) { expressions[expressionId].dump(); };
         bool isAlias (uid_t expressionId) { return expressions[expressionId].isAlias(); };
@@ -56,10 +56,14 @@ class Expressions {
 //        std::string getTextFormula (uid_t expressionId);
     protected:
         FrElement *evaluations;
+        uint64_t evaluationsDone;
+        uint activeCpus;
+
         void compileExpression (nlohmann::json &pilExpressions, uid_t id);
         void resetGroups (void);
         void mergeGroup (uid_t toId, uid_t fromId);
         void recursiveSetGroup (uid_t exprId, uid_t groupId);
+        void updatePercentEvaluated (uint incDone = 0);
 };
 
 }

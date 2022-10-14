@@ -42,17 +42,90 @@ const std::string pilJsonFilename = basePath + "main.pil.json";
 const std::string constFilename = basePath + "zkevm.const";
 const std::string commitFilename = basePath + "zkevm.commit";
 #endif
+#include <getopt.h>
+void usage ( const std::string &prgname )
+{
+    std::cout << "usage:" << std::endl;
+    std::cout << "\t" << prgname << " [-m] <commitfile> -c <constfile> -p <pil.json> [-v] [-V <verifyFileByOmegas>] [-j <verifyFileByPols>]" << std::endl;
+    exit(EXIT_FAILURE);
+}
 
 int main ( int argc, char *argv [])
 {
+    pil::EngineOptions options;
+
+    int opt;
+    if (argc > 1 && argv[1][0] != '-') {
+        options.commitFilename = argv[1];
+    }
+
+    while ((opt = getopt(argc, argv, "p:c:m:vV:j:S:l:s:")) != -1)
+    {
+        switch (opt)
+        {
+            case 'p': // piljson
+                options.pilJsonFilename = optarg;
+                break;
+
+            case 'c':
+                options.constFilename = optarg ;
+                break;
+
+            case 'm':
+                options.commitFilename = optarg ;
+                break;
+
+            case 'v':
+                options.verbose = true;
+                break;
+
+            case 'V':
+                options.expressionsVerifyFilename = optarg;
+                options.expressionsVerifyFileMode = pil::EvaluationMapMode::BY_OMEGAS;
+                break;
+
+            case 'j':
+                options.expressionsVerifyFilename = optarg;
+                options.expressionsVerifyFileMode = pil::EvaluationMapMode::BY_POLS;
+                break;
+
+            case 'S':
+                options.sourcePath = optarg;
+                break;
+
+            case 'l':
+                options.loadExpressions = true;
+                options.expressionsFilename = optarg;
+                break;
+
+            case 's':
+                options.saveExpressions = true;
+                options.expressionsFilename = optarg;
+                break;
+
+            default: /* '?' */
+                usage(argv[0]);
+        }
+    }
+
+    if (optind >= argc) {
+        fprintf(stderr, "commit file must be specified\n");
+        usage(argv[0]);
+    }
+
+    pil::Engine engine(options);
+
+    /*
+
+    exit(EXIT_SUCCESS);
     pil::Engine engine({
-        pilJsonFilename: pilJsonFilename,
-        constFilename: constFilename,
-        // commitFilename: commitFilename,
-        commitFilename: basePath + "zkevm.fake.commit",
-        loadExpressions: true,
-//        saveExpressions: true,
-        expressionsFilename: basePath + "zkevm.fake.expr.bypols.bin"
+        pilJsonFilename : pilJsonFilename,
+        constFilename : constFilename,
+        commitFilename : commitFilename,
+        //        commitFilename: basePath + "zkevm.fake.commit",
+        //        loadExpressions: true,
+        //        saveExpressions: true,
+        expressionsFilename : basePath + "zkevm.fake.expr.bypols.bin"
     });
     // engine.getEvaluation("Main.STEP", 10);
     // engine.getEvaluation("Arith.x1", 12, 3);

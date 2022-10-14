@@ -60,13 +60,15 @@ bool Expression::compile (nlohmann::json &node)
         // its an alias
         alias = true;
         next = (node.contains("next") && node["next"]);
-        // std::cout << "ALIAS: " << vType << node << std::endl;
 
         const uid_t dependency = operations[0].values[0].set(vType, node);
         if (dependency != OperationValue::DEP_NONE) {
             dependencies.add(dependency);
         }
-        // if (next) std::cout << "NEXT ALIAS FOUND" << std::endl;
+        if (next && vType == OperationValueType::EXP) {
+            // TODO: review how impacts next expressions on parallel omega evaluations
+            throw std::runtime_error("next values with expression not allowed");
+        }
     }
     compiled = true;
     return true;
@@ -104,6 +106,7 @@ void Expression::recursiveCompile(nlohmann::json& node, dim_t destination, Opera
             dependencies.add(dependency);
         }
         if (operations[destination].values[valueIndex].isNextExpression()) {
+            std::cout << "FOUND nextExpression id:" << id << " destination:" << destination << " valueIndex:" <<  valueIndex << std::endl;
             nextExpression = true;
         }
     }

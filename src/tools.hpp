@@ -1,4 +1,4 @@
-#ifndef __PIL__TOOLS_HPP__
+#ifndef __PIL__TOOLS__HPP__
 #define __PIL__TOOLS__HPP__
 
 #include <stdint.h>
@@ -34,6 +34,7 @@ class Tools {
         static std::string percentBar (uint64_t n, uint64_t total = 100, bool percent = true, const std::string &ansi = "\x1B[1;32m");
 
         static uint64_t u64Log2 ( uint64_t value );
+        static std::string humanSize ( uint64_t size );
 };
 
 }
