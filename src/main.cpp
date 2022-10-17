@@ -15,6 +15,7 @@
 #include <goldilocks_base_field.hpp>
 #include "engine.hpp"
 #include "tools.hpp"
+#include "expression.hpp"
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -112,6 +113,11 @@ int main ( int argc, char *argv [])
         fprintf(stderr, "commit file must be specified\n");
         usage(argv[0]);
     }
+
+/*    pil::Expression::calculateOperationCost();
+    pil::Expression::calculateOperationCost();
+    pil::Expression::calculateOperationCost();
+    exit(0);*/
 
     pil::Engine engine(options);
 

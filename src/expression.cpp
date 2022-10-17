@@ -213,4 +213,51 @@ uint Expression::replaceOperationValue(OperationValueType oldValueType, uint64_t
     return count;
 }
 
+void Expression::calculateOperationCost (void)
+{
+    FrElement values[2];
+
+    clock_t t1 = clock();
+    values[0] = Goldilocks::w(23);
+    values[1] = Goldilocks::w(17);
+
+    for (uint index = 0; index < 1000000; ++index) {
+        values[0] = Goldilocks::add(values[0], values[1]);
+        values[1] = Goldilocks::add(values[0], values[1]);
+    }
+
+    clock_t t2 = clock();
+    values[0] = Goldilocks::w(23);
+    values[1] = Goldilocks::w(17);
+
+    for (uint index = 0; index < 1000000; ++index) {
+        values[0] = Goldilocks::sub(values[0], values[1]);
+        values[1] = Goldilocks::sub(values[0], values[1]);
+    }
+
+    clock_t t3 = clock();
+    values[0] = Goldilocks::w(23);
+    values[1] = Goldilocks::w(17);
+
+    for (uint index = 0; index < 1000000; ++index) {
+        values[0] = Goldilocks::mul(values[0], values[1]);
+        values[1] = Goldilocks::mul(values[0], values[1]);
+    }
+
+    clock_t t4 = clock();
+    values[0] = Goldilocks::w(23);
+    values[1] = Goldilocks::w(17);
+
+    for (uint index = 0; index < 1000000; ++index) {
+        values[0] = Goldilocks::neg(values[0]);
+        values[0] = Goldilocks::neg(values[0]);
+    }
+
+    clock_t t5 = clock();
+    std::cout << "add: " << (t2-t1) << std::endl;
+    std::cout << "sub: " << (t3-t2) << std::endl;
+    std::cout << "mul: " << (t4-t3) << std::endl;
+    std::cout << "neg: " << (t5-t4) << std::endl;
+}
+
 }

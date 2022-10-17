@@ -42,6 +42,7 @@ namespace pil {
             void setIsZeroFlag ( bool value, omega_t w = 0 ) { isZero = value; firstNonZeroEvaluation = w; };
             omega_t getFirstNonZeroEvaluation ( void ) { return firstNonZeroEvaluation; };
             void setEvaluatedFlag ( bool value ) { evaluated = value; };
+            static void calculateOperationCost (void);
         protected:
             void recursiveCompile (nlohmann::json& node, dim_t destination, OperationType opType);
             dim_t getFreeId (void);
