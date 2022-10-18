@@ -15,7 +15,7 @@
 #include <goldilocks_base_field.hpp>
 #include "engine.hpp"
 #include "tools.hpp"
-
+#include "parser.hpp"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -53,7 +53,13 @@ void usage ( const std::string &prgname )
 int main ( int argc, char *argv [])
 {
     pil::EngineOptions options;
+    pil::Parser p;
 
+
+    p.compile("A +   3 === 12 *    2 ");
+    p.compile("function(Pols,Pols[4], Main.Pols[4], Main.Clock, Main.A0, DEF,HHJK)");
+
+/*
     int opt;
     if (argc > 1 && argv[1][0] != '-') {
         options.commitFilename = argv[1];
@@ -103,7 +109,7 @@ int main ( int argc, char *argv [])
                 options.expressionsFilename = optarg;
                 break;
 
-            default: /* '?' */
+            default:
                 usage(argv[0]);
         }
     }
@@ -114,8 +120,8 @@ int main ( int argc, char *argv [])
     }
 
     pil::Engine engine(options);
-
-    /*
+*/
+     /*
 
     exit(EXIT_SUCCESS);
     pil::Engine engine({

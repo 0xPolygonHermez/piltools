@@ -37,6 +37,13 @@ class Tools {
         static std::string humanSize ( uint64_t size );
 };
 
+template<typename Base, typename T>
+inline bool instanceof(const T *ptr) {
+   return dynamic_cast<const Base*>(ptr) != nullptr;
+   // return std::is_base_of<Base, T>::value;
+}
+
+
 }
 
 #endif

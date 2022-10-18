@@ -24,9 +24,9 @@ all: $(TARGET)
 
 #	$(CC) $(CFLAGS) -o $(TARGET) references.cpp reference.cpp main.cpp  goldilocks/src/goldilocks_base_field.cpp $(LDFLAGS)
 
-$(TARGET): *.cpp *.hpp
+$(TARGET): *.cpp *.hpp token/*.cpp token/*.hpp
 #	$(CC) $(CFLAGS) -o $(TARGET) engine.cpp expression.cpp dependencies.cpp operation_value.cpp operation.cpp public.cpp reference.cpp references.cpp goldilocks/src/goldilocks_base_field.cpp $(LDFLAGS)
-	$(CC) $(CFLAGS) -o $(TARGET) *.cpp goldilocks/src/goldilocks_base_field.cpp $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(TARGET) *.cpp token/*.cpp goldilocks/src/goldilocks_base_field.cpp $(LDFLAGS)
 
 clean:
 	$(RM) $(TARGET)

@@ -61,9 +61,8 @@ FrElement OperationValue::eval(Engine &engine, omega_t w, uid_t evalGroupId, boo
     }
     return Goldilocks::zero();
 }
+
 }
-
-
 
 std::ostream& operator << (std::ostream& os, const pil::OperationValueType &obj)
 {
