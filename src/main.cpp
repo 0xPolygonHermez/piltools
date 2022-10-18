@@ -57,7 +57,7 @@ int main ( int argc, char *argv [])
 
 
     p.compile("A +   3 === 12 *    2 ");
-    p.compile("function(Pols,Pols[4], Main.Pols[4], Main.Clock, Main.A0, DEF,HHJK)");
+    p.compile("function(Pols + 2 * 6,Pols[4], Main.Pols[4], Main.Clock, Main.A0, DEF,HHJK)");
 
 /*
     int opt;

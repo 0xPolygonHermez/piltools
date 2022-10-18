@@ -2,16 +2,35 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <list>
 #include <typeinfo>
 #include "tools.hpp"
 #include "parser.hpp"
-#include "token/numeric.hpp"
-#include "token/id.hpp"
-#include "token/symbol.hpp"
+#include "token.hpp"
 
 namespace pil {
+
+Parser::TokenEntry Parser::tokenTable[14] = {
+    {"==", EQ},
+    {"=", NEQ},
+    {"<=", LE},
+    {">=", GE},
+    {"!", '!'},
+    {"=", '='},
+    {"<", '>'},
+    {">", '>'},
+    {"+", '+'},
+    {"-", '-'},
+    {"*", '*'},
+    {",", ','},
+    {"(", '('},
+    {")", ')'}};
+
+const char *Parser::separators = "\n\t ";
+
 
 
 Parser::Parser (void)
@@ -27,7 +46,8 @@ void Parser::compile (const std::string &program)
 {
     clearTokens();
     tokenize(program);
-    parseInit();
+    Code code;
+    parseInit(code);
 }
 
 
@@ -39,22 +59,17 @@ void Parser::clearTokens (void)
     tokens.clear();
 }
 
-void Parser::parseInit (void)
+void Parser::parseInit (Code &result)
 {
     std::cout << "parseInit " << std::endl;
     itoken = tokens.begin();
-    std::cout << typeid(**itoken).name() << "\"" << (*itoken)->content << "\"" << instanceof<token::Id>(*itoken) << std::endl;
-    if (instanceof<token::Id>(*itoken)) {
-        auto next = itoken;
-        ++next;
-        std::cout << "NEXT" << typeid(**next).name() << "\"" << (*next)->content << "\"" << std::endl;
-        if (next != tokens.end() && (*next)->content == "(") {
-            ++itoken;
-            ++itoken;
-            parseFunction();
-        }
+    if (getTokenType(0) == ID && getTokenType(1) == '(') {
+        nextToken(2);
+        parseFunction(result);
+    } else {
+        parseExpression(result);
     }
-    parseExpression();
+    parseExpression(result);
 }
 
 std::string Parser::remainingTokens ( void )
@@ -67,89 +82,114 @@ std::string Parser::remainingTokens ( void )
         result += " ";
         ++it;
     }
-    return "\x1B[46m" +result+"\x1B[0m";
+    return "\x1B[1;44;37m" +result+"\x1B[0m";
 }
 
-void Parser::parseExpression ( void )
+void Parser::parseExpression (Code &result)
 {
     std::cout << "parseExpression " << remainingTokens() << std::endl;
-    auto &token = **itoken;
     /* unitary_operator expr */
     /* ( expr ) */
     /* expr op expr */
     /* id */
     /* number */
+    uint t0 = getTokenType(0);
+    std::cout << "t0=" << t0 << std::endl;
+    switch (t0) {
 
-    if (instanceof<token::Numeric>(*itoken)) {
-        ++itoken;
-        return;
+        case NUM:
+            break;
+
+        case ID:
+            break;
+
+        case '!':
+            nextToken(1);
+            parseExpression(result);
+            return;
+
+        case '(':
+            nextToken(1);
+            parseExpression(result);
+            return;
+
+        default:
+            std::cout << "ERROR not found t0:" << t0 << std::endl;
+            break;
     }
 
-    if (instanceof<token::Id>(*itoken)) {
-        ++itoken;
-        return;
-    }
+    uint t1 = getTokenType(1);
+    std::cout << "t1=" << t1 << std::endl;
+    switch (t1) {
 
-    if (instanceof<token::Symbol>(*itoken) && ((token::Symbol *)(*itoken))->isUnary()) {
-        ++itoken;
-        parseExpression();
-        return;
-    }
-
-    if (token.content == "(") {
-        ++itoken;
-        parseExpression();
-        return;
+        case '+':
+        case '-':
+        case '*':
+        case EQ:
+        case NEQ:
+        case LE:
+        case GE:
+            nextToken(2);
+            parseExpression(result);
+            return;
+        default:
+            std::cout << "ERROR not found " << t1 << std::endl;
+            break;
     }
 }
 
-void Parser::parseFunction ( void )
+void Parser::parseFunction (Code &result)
 {
     std::cout << "parseFunction " << remainingTokens() << std::endl;
-    bool argumentIndex = 0;
-    while (itoken != tokens.end() && (*itoken)->content != ")") {
-        auto &token = **itoken;
+    uint argumentIndex = 0;
+    while (getTokenType(0) != ')') {
+        Code arg;
         if (argumentIndex) {
-            if (token.content != ",") {
-                throw ParserException("Expecting , but found "+ token.content);
+            if (getTokenType(0) != ',') {
+                std::cout << "Expecting , but found " << getTokenContent(0) << std::endl;
+                throw new ParserException("Expecting , but found "+ getTokenContent(0));
             }
-            ++itoken;
+            nextToken(1);
         }
-        parseExpression();
+        parseExpression(arg);
         std::cout << "> parseFunction " << remainingTokens() << std::endl;
+        result.merge(arg);
+        std::cout << "aftermerge" << std::endl;
+        ++argumentIndex;
     }
 }
+
+
 
 void Parser::tokenize (const std::string &program)
 {
-    static const char *operators = "!=<>+*-(),";
-    static const char *operators2B = "!= == <= >=";
-    static const char *separators = "\n\t ";
     static const char *hexdigits = "0123456789ABCDEFabcdef";
     static const char *decdigits = "0123456789";
 
     const char *cprog = program.c_str();
     const char *end = cprog + program.size();
-    char tmp2B[4] = "XX ";
+
+    uint tokenTableCount = sizeof(tokenTable) / sizeof(tokenTable[0]);
 
     while (cprog < end) {
+        // separators
         while (cprog < end && strchr(separators, *cprog) != NULL) ++cprog;
-        if (cprog < end && strchr(operators, *cprog)) {
-            if ((cprog + 1) < end) {
-                tmp2B[0] = *cprog;
-                tmp2B[1] = *(cprog+1);
 
-                if (strstr(operators2B, tmp2B) != NULL) {
-                    std::string value(tmp2B, 2);
-                    tokens.push_back(token::Symbol::generate(value));
-                    cprog += 2;
-                    continue;
-                }
+        uint itoken;
+        for (itoken = 0; itoken < tokenTableCount; ++itoken) {
+            uint index = 0;
+
+            while (tokenTable[itoken].pattern[index] && cprog[index] && tokenTable[itoken].pattern[index] == cprog[index]) {
+                ++index;
             }
-            std::string value(cprog++, 1);
-            tokens.push_back(token::Symbol::generate(value));
-            continue;
+            if (!tokenTable[itoken].pattern[index] || tokenTable[itoken].pattern[index] == cprog[index]) {
+                tokens.push_back(new Token(tokenTable[itoken].tokenid, tokenTable[itoken].pattern));
+                cprog += strlen(tokenTable[itoken].pattern);
+                break;
+            }
         }
+        if (itoken < tokenTableCount) continue;
+
         if (cprog < end && *cprog >= '0' && *cprog <= '9') {
             const char *from = cprog;
             if ((cprog + 2) < end && *cprog == '0' && (cprog[1] == 'x' || cprog[1] == 'X')) {
@@ -160,7 +200,7 @@ void Parser::tokenize (const std::string &program)
                 while (cprog < end && strchr(decdigits, *cprog) != NULL) ++cprog;
             }
             std::string value(from, cprog-from);
-            tokens.push_back(token::Numeric::generate(value));
+            tokens.push_back(new Token(NUM, value));
             continue;
         }
         if (cprog < end && ((*cprog >= 'A' && *cprog <= 'Z') || (*cprog >= 'a' && *cprog <= 'z') || strchr("_%",*cprog))) {
@@ -170,7 +210,7 @@ void Parser::tokenize (const std::string &program)
                 ++cprog;
             }
             std::string value(from, cprog-from);
-            tokens.push_back(token::Id::generate(value));
+            tokens.push_back(new Token(ID, value));
             continue;
         }
         if (cprog < end) {
@@ -180,7 +220,43 @@ void Parser::tokenize (const std::string &program)
     }
 
     for (auto it = tokens.begin(); it != tokens.end(); ++it) {
-        std::cout << typeid(**it).name() << "[" << (*it)->content << "]" << std::endl;
+        std::cout << "TOKEN " << (*it)->type << " " << (*it)->content << std::endl;
     }
 }
+
+uint Parser::getTokenType (uint steps)
+{
+    auto it = itoken;
+    while (steps > 0) {
+        ++it;
+        --steps;
+    }
+
+    return (*it)->type;
+}
+
+std::string Parser::getTokenContent (uint steps)
+{
+    auto it = itoken;
+    std::cout << "\x1B[32mgetTokenContent(" << steps << "," << ")" << std::flush;
+    while (steps > 0 && it != tokens.end()) {
+        ++it;
+        --steps;
+    }
+
+    std::string res = ((it != tokens.end()) ? (*it)->content : "(EOF)");
+    std::cout << res << "\x1B[0m" << std::endl;
+    return res;
+}
+
+void Parser::nextToken (uint steps)
+{
+    std::cout << "\x1B[33mnextToken(" << steps << "," << "," << std::flush;
+    while (steps > 0 && itoken != tokens.end()) {
+        ++itoken;
+        --steps;
+    }
+    std::cout << steps << ")\x1B[0m" << std::endl;
+}
+
 }
