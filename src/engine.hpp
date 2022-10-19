@@ -33,6 +33,12 @@ class EngineOptions {
         std::string expressionsVerifyFilename = "";
         EvaluationMapMode expressionsVerifyFileMode = EvaluationMapMode::BY_OMEGAS;
         bool verbose;
+        bool checkPlookups = true;
+        bool checkIdentities = true;
+        bool checkPermutations = true;
+        bool checkConnections = true;
+        bool calculateExpressions = true;
+        bool interactive = false;
         std::string sourcePath;
 };
 
@@ -58,6 +64,7 @@ class Engine {
         Engine(const EngineOptions options);
         ~Engine (void);
 
+        const Reference *getReference(const std::string &name, index_t index = 0);
         FrElement getEvaluation (const std::string &name, omega_t w = 0, index_t index = 0);
         const FrElement getConst (uid_t id, omega_t w = 0) { return constPols[(uint64_t) w * nConstants + id]; };
         const FrElement getCommited (uid_t id, omega_t w = 0) { return cmPols[(uint64_t)w * nCommitments + id]; };

@@ -3,6 +3,7 @@
 
 #include <nlohmann/json.hpp>
 #include <map>
+#include <functional>
 #include "fr_element.hpp"
 #include "types.hpp"
 
@@ -20,11 +21,13 @@ class References {
         const Reference *get(uid_t id);
         void map(void *data);
         FrElement getEvaluation(uid_t id, omega_t w, index_t index = 0);
+        void setExternalEvaluator(std::function<FrElement(uid_t, omega_t, index_t)> evaluator) { externalEvaluator = evaluator; };
         std::string getName(uid_t id) const;
         References (ReferenceType type);
         ~References (void);
     protected:
         ReferenceType type;
+        std::function<FrElement(uid_t, omega_t, index_t)> externalEvaluator;
         std::map<uid_t, Reference *> values;
         FrElement *evaluations;
 };

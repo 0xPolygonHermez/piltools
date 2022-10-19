@@ -21,6 +21,8 @@
 #include "tools.hpp"
 #include "connection_map.hpp"
 #include "block.hpp"
+#include "interactive.hpp"
+#include "cyclic.hpp"
 
 namespace pil {
 
@@ -41,13 +43,29 @@ Engine::Engine(EngineOptions options)
     loadPublics();
 
     loadAndCompileExpressions();
-    calculateAllExpressions();
+    if (options.calculateExpressions) {
+        calculateAllExpressions();
+        imRefs.setExternalEvaluator([this](uid_t id, omega_t w, index_t index = 0) {return this->expressions.getEvaluation(id, w);});
+    }
 
-    checkPolIdentities();
-    checkPlookupIdentities();
-    checkPermutationIdentities();
-    checkConnectionIdentities();
+
+    if (options.checkIdentities) {
+        checkPolIdentities();
+    }
+    if (options.checkPlookups) {
+        checkPlookupIdentities();
+    }
+    if (options.checkPermutations) {
+        checkPermutationIdentities();
+    }
+    if (options.checkConnections) {
+        checkConnectionIdentities();
+    }
     std::cout << "done in " << Block::getTotalTime() << " ms" << std::endl;
+    if (options.interactive) {
+        Interactive interactive(*this);
+        interactive.execute();
+    }
 }
 
 void *Engine::mapFile(const std::string &title, const std::string &filename, dim_t size, bool wr )
@@ -100,7 +118,7 @@ void Engine::unmapAll (void)
     mappings.clear();
 }
 
-FrElement Engine::getEvaluation(const std::string &name, omega_t w, index_t index )
+const Reference *Engine::getReference(const std::string &name, index_t index )
 {
     auto pos = referencesByName.find(name);
     if (pos == referencesByName.end()) {
@@ -112,9 +130,14 @@ FrElement Engine::getEvaluation(const std::string &name, omega_t w, index_t inde
             throw std::runtime_error("Out of index on Reference "+name+"["+std::to_string(pRef->len)+"] with arrayIndex "+std::to_string(index));
         }
     }
-    FrElement evaluation = pRef->getEvaluation(w, index);
-    // std::cout << pRef->name << " = " << FrToString(evaluation) << std::endl;
-    return evaluation;
+    return pRef;
+}
+
+FrElement Engine::getEvaluation(const std::string &name, omega_t w, index_t index )
+{
+
+    const Reference *pRef = getReference(name, index);
+    return pRef->getEvaluation(w, index);
 }
 
 
@@ -339,10 +362,14 @@ void Engine::checkPlookupIdentities (void)
     auto tt = new std::unordered_set<std::string>[identitiesCount];
     auto tCount = new dim_t[identitiesCount]();
     auto fCount = new dim_t[identitiesCount]();
+    auto cyclic = new Cyclic[identitiesCount];
 
     auto startT = Tools::startCrono();
 
-    prepareT(identities, "Plookup", [tt, tCount](dim_t index, const std::string &value) { ++tCount[index]; tt[index].insert(value); return 0; });
+    prepareT(identities, "Plookup", [tt, tCount, cyclic](dim_t index, const std::string &value, omega_t w) {   cyclic[index].cycle(w);
+                                                                                                               ++tCount[index];
+                                                                                                               tt[index].insert(value);
+                                                                                                               return 0; });
     verifyF(identities, "Plookup", [tt, fCount,this](dim_t index, const std::string &value, omega_t w) {
                                                                         ++fCount[index];
                                                                         int result = tt[index].count(value);
@@ -350,19 +377,28 @@ void Engine::checkPlookupIdentities (void)
                                                                         return result; });
     Tools::endCronoAndShowIt(startT);
 
+    std::cout << "#   |SOURCE                                  |SELF(left)          |#F        |SELT(right)         |#T        |#T UNIQS  |NOTES" << std::endl;
+    std::cout << "----+----------------------------------------+--------------------+----------+--------------------+----------+----------+----------" << std::endl;
     for (dim_t index = 0; index < identitiesCount; ++index) {
-        const std::string selector = identities[index]["selT"].is_null() ? "(none)":expressions.getName(identities[index]["selT"]);
-        printf("%-40s|%20s|%10ld|%20s|%10ld|%10ld\n", (((std::string)identities[index]["fileName"])+ ":" +std::to_string((uint)(identities[index]["line"]))).c_str(),
-            selector.c_str(), (uint64_t)tCount[index], "", (uint64_t)fCount[index], (uint64_t)tt[index].size());
+        const bool hasSelT = identities[index]["selT"].is_null() == false;
+        const std::string selector = hasSelT ? expressions.getName(identities[index]["selT"]):"(none)";
+        std::stringstream notes;
+
+        if (cyclic[index].isCyclic() && hasSelT) {
+            notes << (cyclic[index].isCyclic(n) ? "full-":"") << "cyclic +" << cyclic[index].offset() << "/" << cyclic[index].period() << "  ";
+        }
+        printf("%-4ld|%-40s|%20s|%10ld|%20s|%10ld|%10ld|%s\n", index, (((std::string)identities[index]["fileName"])+ ":" +std::to_string((uint)(identities[index]["line"]))).c_str(),
+            "", (uint64_t)fCount[index], selector.c_str(), (uint64_t)tCount[index], (uint64_t)tt[index].size(), notes.str().c_str());
     }
 
     startT = Tools::startCrono();
     std::cout << "start to delete" << std::endl;
     #pragma omp parallel for
-    for (dim_t index = 0; index < identitiesCount+2; ++index) {
+    for (dim_t index = 0; index < identitiesCount + 3; ++index) {
         if (index < identitiesCount) tt[index].clear();
-        if (index == identitiesCount) delete [] tCount;
-        if (index > identitiesCount) delete [] fCount;
+        if (index == (identitiesCount + 0)) delete [] tCount;
+        if (index == (identitiesCount + 1)) delete [] fCount;
+        if (index == (identitiesCount + 2)) delete [] cyclic;
     }
     delete [] tt;
     Tools::endCronoAndShowIt(startT);
@@ -393,13 +429,13 @@ void Engine::checkPermutationIdentities (void)
     const dim_t identitiesCount = identities.size();
     auto tt = new std::unordered_map<std::string, int64_t>[identitiesCount];
 
-    prepareT(identities, "Permutation", [tt](dim_t index, const std::string &value) { auto it = tt[index].find(value);
-                                                                                      if (it == tt[index].end()) {
-                                                                                        tt[index][value] = 1;
-                                                                                      } else {
-                                                                                        ++it->second;
-                                                                                      }
-                                                                                      return 0; });
+    prepareT(identities, "Permutation", [tt](dim_t index, const std::string &value, omega_t w) {    auto it = tt[index].find(value);
+                                                                                                    if (it == tt[index].end()) {
+                                                                                                        tt[index][value] = 1;
+                                                                                                    } else {
+                                                                                                        ++it->second;
+                                                                                                    }
+                                                                                                    return 0; });
     verifyF(identities, "Permutation", [tt, this](dim_t index, const std::string &value, omega_t w) {
                                                                                      auto it = tt[index].find(value);
                                                                                      if (it == tt[index].end()) {
@@ -453,7 +489,7 @@ void Engine::prepareT (nlohmann::json& identities, const std::string &label, Set
 
         for (omega_t w = 0; w < n; ++w) {
             if (hasSelT && Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
-            set(identityIndex, expressions.valuesToBinString(ts, tCount, w));
+            set(identityIndex, expressions.valuesToBinString(ts, tCount, w), w);
         }
         updatePercentT("preparing "+label+" selT/T ", done, identitiesCount);
     }
@@ -467,6 +503,7 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, Chec
     uint64_t done = 0;
 
     const uint64_t doneStep = n / 20;
+
     #pragma omp parallel for
     for (dim_t identityIndex = 0; identityIndex < identitiesCount; ++identityIndex) {
         const std::string plabel = label + "[" + std::to_string(identityIndex+1) + "/" + std::to_string(identitiesCount) + "] ";

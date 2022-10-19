@@ -15,7 +15,9 @@ endif
 #LDFLAGS := -lpthread -lgmp -lstdc++ -lomp -lgmpxx -lbenchmark -L$(LIBOMP) -Wno-unknown-pragmas
 
 CFLAGS  = -ggdb3 -O3 -Wall -std=c++17 -I goldilocks/src -pthread -fopenmp -D__OVERLOAD_POLS__
-LDFLAGS  = -lpthread -lgmp -lgmpxx -lomp -L$(LIBOMP)
+
+# sudo apt install libeditreadline-dev
+LDFLAGS  = -lpthread -lgmp -lgmpxx -lomp -lreadline -L$(LIBOMP)
 
 # The build target
 TARGET = ../build/main

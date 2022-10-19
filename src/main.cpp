@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <map>
 #include <string>
+#include <cstring>
 #include <sys/mman.h>
 #include <errno.h>
 #include "omp.h"
@@ -59,7 +60,7 @@ int main ( int argc, char *argv [])
         options.commitFilename = argv[1];
     }
 
-    while ((opt = getopt(argc, argv, "p:c:m:vV:j:S:l:s:")) != -1)
+    while ((opt = getopt(argc, argv, "p:c:m:vV:j:S:l:s:id:")) != -1)
     {
         switch (opt)
         {
@@ -102,6 +103,21 @@ int main ( int argc, char *argv [])
                 options.saveExpressions = true;
                 options.expressionsFilename = optarg;
                 break;
+
+            case 'i':
+                options.interactive = true;
+                break;
+
+            case 'd':
+            {
+                const bool disableAll = (strcasecmp(optarg, "ALL") == 0);
+                options.checkPlookups = !disableAll && strchr(optarg, 'O') == NULL;
+                options.checkPermutations = !disableAll && strchr(optarg, 'E') == NULL;
+                options.checkConnections = !disableAll && strchr(optarg, 'C') == NULL;
+                options.checkIdentities = !disableAll && strchr(optarg, 'I') == NULL;
+                options.calculateExpressions = !disableAll && strchr(optarg, 'X') == NULL;
+                break;
+            }
 
             default: /* '?' */
                 usage(argv[0]);
