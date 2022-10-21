@@ -21,8 +21,11 @@
 #include "tools.hpp"
 #include "connection_map.hpp"
 #include "block.hpp"
-#include "interactive.hpp"
 #include "cyclic.hpp"
+
+#ifdef PIL_VERIFY
+#include "interactive.hpp"
+#endif
 
 namespace pil {
 
@@ -48,7 +51,6 @@ Engine::Engine(EngineOptions options)
         imRefs.setExternalEvaluator([this](uid_t id, omega_t w, index_t index = 0) {return this->expressions.getEvaluation(id, w);});
     }
 
-
     if (options.checkIdentities) {
         checkPolIdentities();
     }
@@ -62,10 +64,13 @@ Engine::Engine(EngineOptions options)
         checkConnectionIdentities();
     }
     std::cout << "done in " << Block::getTotalTime() << " ms" << std::endl;
+
+    #ifdef PIL_VERIFY
     if (options.interactive) {
         Interactive interactive(*this);
         interactive.execute();
     }
+    #endif
 }
 
 void *Engine::mapFile(const std::string &title, const std::string &filename, dim_t size, bool wr )
@@ -118,6 +123,20 @@ void Engine::unmapAll (void)
     mappings.clear();
 }
 
+const Reference *Engine::getDirectReference(const std::string &name)
+{
+    auto pos = name.find('[');
+    if (pos != std::string::npos) {
+        auto epos = name.find(']', pos);
+        if (epos != std::string::npos && epos > (pos + 1)) {
+            uint index = strtoull(name.substr(pos+1, epos-pos-1).c_str(), NULL, 10);
+            auto reference = getReference(name.substr(0, pos));
+            return reference->getIndex(index);
+        }
+    }
+    return getReference(name);
+}
+
 const Reference *Engine::getReference(const std::string &name, index_t index )
 {
     auto pos = referencesByName.find(name);
@@ -135,7 +154,6 @@ const Reference *Engine::getReference(const std::string &name, index_t index )
 
 FrElement Engine::getEvaluation(const std::string &name, omega_t w, index_t index )
 {
-
     const Reference *pRef = getReference(name, index);
     return pRef->getEvaluation(w, index);
 }
@@ -242,6 +260,13 @@ void Engine::loadReferences (void)
         }
         if (ref) {
             referencesByName[name] = ref;
+            auto pos = name.find_first_of('.');
+            if (pos != std::string::npos) {
+                std::string ns = name.substr(0, pos);
+                if (std::find(namespaces.begin(), namespaces.end(), ns) == namespaces.end()) {
+                    namespaces.push_back(ns);
+                }
+            }
         }
     }
 
@@ -489,6 +514,7 @@ void Engine::prepareT (nlohmann::json& identities, const std::string &label, Set
 
         for (omega_t w = 0; w < n; ++w) {
             if (hasSelT && Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
+            if (identityIndex == 30) std::cout << "T;30;" << w << ";" << expressions.valuesToString(ts, tCount, w) << std::endl;
             set(identityIndex, expressions.valuesToBinString(ts, tCount, w), w);
         }
         updatePercentT("preparing "+label+" selT/T ", done, identitiesCount);
@@ -525,6 +551,10 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, Chec
             omega_t w2 = (ichunk == (chunks - 1)) ? n: w1 + wn;
             for (omega_t w = w1; w < w2; ++w) {
                 if (hasSelF && Goldilocks::isZero(expressions.getEvaluation(selF, w))) continue;
+                #pragma omp critical
+                {
+                    if (identityIndex == 30) std::cout << "F;30;" << w << ";" << expressions.valuesToString(fs, fCount, w) << std::endl;
+                }
                 if (check(identityIndex, expressions.valuesToBinString(fs, fCount, w), w) == 0 ) {
                     ichunk = chunks;
                     w2 = n;
@@ -682,6 +712,33 @@ bool Engine::checkFilename (const std::string &filename, bool toWrite, bool exce
         std::cerr << msg << std::endl;
     }
     return result;
+}
+/*
+template<typename T>
+void Engine::listReferences (T &names)
+{
+    constRefs.list(names);
+    cmRefs.list(names);
+    // imRefs.list(names);
+}
+*/
+
+void Engine::listReferences (std::list<std::string> &names, bool expandArrays)
+{
+    for (auto it = referencesByName.begin(); it != referencesByName.end(); ++it) {
+        const uint len = it->second->len;
+        if (expandArrays && len > 1) {
+            uint maxtmp = it->first.size() + 23;
+            char tmp[maxtmp];
+            for (uint index = 0; index < len; ++index) {
+                snprintf(tmp, maxtmp, "%s[%lu]", it->first.c_str(), index);
+                names.push_back(tmp);
+            }
+        } else {
+            names.push_back(it->first);
+        }
+    }
+    // imRefs.list(names);
 }
 
 }

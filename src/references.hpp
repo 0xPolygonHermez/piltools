@@ -3,6 +3,7 @@
 
 #include <nlohmann/json.hpp>
 #include <map>
+#include <list>
 #include <functional>
 #include "fr_element.hpp"
 #include "types.hpp"

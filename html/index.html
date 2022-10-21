@@ -1,0 +1,104 @@
+<html>
+<title>PILviewer</title>
+<!-- CSS only -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-Zenh87qX5JnK2Jl0vWa8Ck2rdkQ2Bzep5IDxbcnCeuOxjzrPF/et3URy9Bv1WTRi" crossorigin="anonymous">
+<!-- JavaScript Bundle with Popper -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-OERcA2EqjJCMA+/3y+gxIOqMEjwtxJY7qPCqsdltbNJuaOe923+mo//f6V8Qbsw3" crossorigin="anonymous"></script>
+
+<script>
+const loadData = async () => {
+    const queryString = window.location.search;
+    console.log(queryString);
+    const urlParams = new URLSearchParams(queryString);
+    console.log(urlParams);
+
+    const nsResp = await fetch('http://localhost:8080/namespaces');
+    const nsJson = await nsResp.json(); //extract JSON from the http response
+    document.getElementById("namespace-dropdown-items").innerHTML =
+        '<li><a class="dropdown-item" href="#">' + nsJson.namespaces.join('</a></li><li><a class="dropdown-item" href="#">') +'</a></li>';
+
+    let url = 'http://localhost:8080/query?compact';
+    for (const param of ['from', 'count','namespace', 'name','filter', 'trigger']) {
+        if (urlParams.has(param)) {
+            url += '&'+param+'='+urlParams.get(param);
+            document.querySelector(".pil-query-params input[name='"+param+"']").value = urlParams.get(param);
+        }
+    }
+    console.log(url);
+    const polResp = await fetch(url);
+    const polJson = await polResp.json(); //extract JSON from the http response
+
+    document.getElementById("pols-titles").innerHTML =
+        '<tr><th scope="col">' + polJson.titles.join('</th><th scope="col">') +'</th></tr>';
+
+    let content = "";
+    for (let ivalues = 0; ivalues < polJson.values.length; ++ivalues) {
+        const values = polJson.values[ivalues];
+        content += '<tr><th align="right" scope="row">' + values[0] + '</th>';
+        for (let index = 1; index < values.length; ++index) {
+            extra = ((ivalues > 0) && (polJson.values[ivalues-1][index] != values[index])) ? ' style="background-color:#ffe391"':'';
+            content += '<td' + extra + ' align="right">' + values[index] +'</td>';
+        }
+        content += '</tr>'
+    }
+    document.getElementById("pols-values").innerHTML = content;
+  // do something with myJson
+}
+</script>
+<body onload="loadData()">
+<H1>PIL viewer</H1>
+<div>
+    <div class="dropdown" hidden>
+        <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        Namespaces
+        </button>
+        <ul class="dropdown-menu" id="namespace-dropdown-items">
+        </ul>
+    </div>
+    <form method="GET">
+        <div class="row pil-query-params">
+            <div class="col-1">
+              <label for="inputEmail4" class="form-label">from (omega)</label>
+              <input type="text" class="form-control" placeholder="from" aria-label="from" name="from" value="0">
+            </div>
+            <div class="col-1">
+                <label for="inputEmail4" class="form-label">count</label>
+                <input type="text" class="form-control" placeholder="count" aria-label="count" name="count" value="10">
+            </div>
+            <div class="col-2">
+                <label for="inputEmail4" class="form-label">namespaces</label>
+                <input type="text" class="form-control" placeholder="namespaces" aria-label="namespaces" name="namespace">
+            </div>
+            <div class="col-3">
+                <label for="inputEmail4" class="form-label">names</label>
+                <input type="text" class="form-control" placeholder="names" aria-label="names" name="name">
+            </div>
+            <div class="col-2">
+                <label for="inputEmail4" class="form-label">filter</label>
+                <input type="text" class="form-control" placeholder="filter" aria-label="filter" name="filter">
+            </div>
+            <div class="col-2">
+                <label for="inputEmail4" class="form-label">trigger</label>
+                <input type="text" class="form-control" placeholder="trigger" aria-label="trigger" name="trigger">
+            </div>
+            <div class="col-1">
+                <button type="submit" class="btn btn-primary">refresh</button>
+            </div>
+        </div>
+    </form>
+    <div class="table-responsive">
+        <table class="table">
+            <thead id="pols-titles">
+                <tr>
+                  <th scope="col">w</th>
+                </tr>
+            </thead>
+            <tbody id="pols-values">
+            </tbody>
+        </table>
+
+
+    </div>
+</div>
+</body>
+</html>

@@ -61,4 +61,20 @@ std::string Tools::humanSize ( uint64_t size )
     return output;
 }
 
+
+std::string Tools::replaceAll (const std::string &value, const std::string& search, const std::string& replace)
+{
+    std::string result = "";
+    size_t ppos = 0;
+    size_t pos = 0;
+    size_t len = search.size();
+    while((pos = value.find(search, ppos)) != std::string::npos) {
+        if (pos > ppos) result += value.substr(ppos, pos - ppos);
+        result += replace;
+        ppos = pos + len;
+    }
+    result += value.substr(ppos);
+    return result;
+}
+
 }

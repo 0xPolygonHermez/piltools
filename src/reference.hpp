@@ -33,6 +33,7 @@ class Reference {
         ReferenceType type;
         std::string name;
         FrElement getEvaluation(omega_t w, index_t index = 0) const;
+        const Reference *getIndex(index_t index) const;
         Reference (References &parent, uid_t id, dim_t len, index_t index, ReferenceType type, const std::string &name);
         std::string getName (void) const { return name; };
 };

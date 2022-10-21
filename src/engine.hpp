@@ -59,12 +59,14 @@ class Engine {
         FrElement *constPols;
         FrElement *cmPols;
         EngineOptions options;
+        std::list<std::string> namespaces;
 
         enum class PermutationError { notFound, notEnought, remainingValues };
         Engine(const EngineOptions options);
         ~Engine (void);
 
-        const Reference *getReference(const std::string &name, index_t index = 0);
+        const Reference *getReference (const std::string &name, index_t index = 0);
+        const Reference *getDirectReference (const std::string &name);
         FrElement getEvaluation (const std::string &name, omega_t w = 0, index_t index = 0);
         const FrElement getConst (uid_t id, omega_t w = 0) { return constPols[(uint64_t) w * nConstants + id]; };
         const FrElement getCommited (uid_t id, omega_t w = 0) { return cmPols[(uint64_t)w * nCommitments + id]; };
@@ -76,6 +78,8 @@ class Engine {
         omega_t next (omega_t w)  { return w % n; };
 
         void dump (uid_t id);
+        // template<typename T> void listReferences (T &names);
+        void listReferences (std::list<std::string> &names, bool expandArrays = true);
     protected:
         nlohmann::json pil;
         std::map<void *,size_t> mappings;
