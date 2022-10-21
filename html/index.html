@@ -6,19 +6,32 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-OERcA2EqjJCMA+/3y+gxIOqMEjwtxJY7qPCqsdltbNJuaOe923+mo//f6V8Qbsw3" crossorigin="anonymous"></script>
 
 <script>
+let base = 17;
+
+function changeBase () {
+    base = event.target.value;
+    refreshTable();
+}
+let polJson;
+
 const loadData = async () => {
     const queryString = window.location.search;
     console.log(queryString);
     const urlParams = new URLSearchParams(queryString);
-    console.log(urlParams);
 
-    const nsResp = await fetch('http://localhost:8080/namespaces');
-    const nsJson = await nsResp.json(); //extract JSON from the http response
-    document.getElementById("namespace-dropdown-items").innerHTML =
-        '<li><a class="dropdown-item" href="#">' + nsJson.namespaces.join('</a></li><li><a class="dropdown-item" href="#">') +'</a></li>';
+    base = document.querySelector(".pil-query-params select[name='base']").value;
+
+    const polsResp = await fetch('http://localhost:8080/pols');
+    const polsJson = await polsResp.json(); //extract JSON from the http response
+
+    let content;
+    for (const polname of polsJson.pols) {
+        content += `<option value="${polname}">${polname}</option>`;
+    }
+    document.getElementById("pols-select-items").innerHTML = content;
 
     let url = 'http://localhost:8080/query?compact';
-    for (const param of ['from', 'count','namespace', 'name','filter', 'trigger']) {
+    for (const param of ['from', 'count','name','filter', 'trigger']) {
         if (urlParams.has(param)) {
             url += '&'+param+'='+urlParams.get(param);
             document.querySelector(".pil-query-params input[name='"+param+"']").value = urlParams.get(param);
@@ -26,18 +39,35 @@ const loadData = async () => {
     }
     console.log(url);
     const polResp = await fetch(url);
-    const polJson = await polResp.json(); //extract JSON from the http response
+    polJson = await polResp.json(); //extract JSON from the http response
+    refreshTable();
+}
+function refreshTable()
+{
+    let content = "<tr>";
+    for (title of polJson.titles) {
+        title = title.split('.').join('</br>');
+        content += '<th scope="col">' + title + '</th>';
+    }
+    content += "</tr>";
+    document.getElementById("pols-titles").innerHTML = content;
 
-    document.getElementById("pols-titles").innerHTML =
-        '<tr><th scope="col">' + polJson.titles.join('</th><th scope="col">') +'</th></tr>';
-
-    let content = "";
+    content = "";
     for (let ivalues = 0; ivalues < polJson.values.length; ++ivalues) {
         const values = polJson.values[ivalues];
         content += '<tr><th align="right" scope="row">' + values[0] + '</th>';
         for (let index = 1; index < values.length; ++index) {
-            extra = ((ivalues > 0) && (polJson.values[ivalues-1][index] != values[index])) ? ' style="background-color:#ffe391"':'';
-            content += '<td' + extra + ' align="right">' + values[index] +'</td>';
+            let value = values[index];
+            extra = ((ivalues > 0) && (polJson.values[ivalues-1][index] != value)) ? ' style="background-color:#ffe391"':'';
+            if (base == 16) {
+                value = '0x'+value.toString(16).toUpperCase();
+            } else if (base == 17) {
+                value = (BigInt(value) > 9223372034707292160n) ? -(0xFFFFFFFF00000001n - BigInt(value)) : value;
+            } else {
+                value = value.toString(base);
+            }
+
+            content += '<td' + extra + ' align="right">' + value +'</td>';
         }
         content += '</tr>'
     }
@@ -48,13 +78,14 @@ const loadData = async () => {
 <body onload="loadData()">
 <H1>PIL viewer</H1>
 <div>
-    <div class="dropdown" hidden>
-        <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-        Namespaces
-        </button>
-        <ul class="dropdown-menu" id="namespace-dropdown-items">
-        </ul>
-    </div>
+    <div class="collapse" id="collapseExample">
+        <div class="card card-body">
+          Some placeholder content for the collapse component. This panel is hidden by default but revealed when the user activates the relevant trigger.
+          <select class="select" multiple id="pols-select-items">
+            <option value="1">One</option>
+        </select>
+            </div>
+      </div>
     <form method="GET">
         <div class="row pil-query-params">
             <div class="col-1">
@@ -65,13 +96,11 @@ const loadData = async () => {
                 <label for="inputEmail4" class="form-label">count</label>
                 <input type="text" class="form-control" placeholder="count" aria-label="count" name="count" value="10">
             </div>
-            <div class="col-2">
-                <label for="inputEmail4" class="form-label">namespaces</label>
-                <input type="text" class="form-control" placeholder="namespaces" aria-label="namespaces" name="namespace">
-            </div>
-            <div class="col-3">
-                <label for="inputEmail4" class="form-label">names</label>
+            <div class="col-3 input-group mb-3">
                 <input type="text" class="form-control" placeholder="names" aria-label="names" name="name">
+                <div class="input-group-append">
+                    <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapseExample" aria-expanded="false" aria-controls="collapseExample">select</button>
+                </div>
             </div>
             <div class="col-2">
                 <label for="inputEmail4" class="form-label">filter</label>
@@ -84,8 +113,19 @@ const loadData = async () => {
             <div class="col-1">
                 <button type="submit" class="btn btn-primary">refresh</button>
             </div>
+            <div class="col-1" onchange="changeBase(event)" >
+                <select class="form-select" aria-label="base" name="base">
+                    <option value="2">Binary</option>
+                    <option value="8">Octal</option>
+                    <option value="10" selected>Decimal</option>
+                    <option value="16">Hexa</option>
+                    <option value="17">FF-Int</option>
+                </select>
+            </div>
         </div>
+
     </form>
+
     <div class="table-responsive">
         <table class="table">
             <thead id="pols-titles">
