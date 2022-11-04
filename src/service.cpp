@@ -1,7 +1,9 @@
-#include <nlohmann/json.hpp>
+
 #include <unordered_map>
 #include <string>
 #include <regex>
+#include <stdint.h>
+#include <sstream>
 
 #include "fr_element.hpp"
 
@@ -35,40 +37,10 @@ std::string Service::getNamespace (const std::string polname)
     return polname.substr(0, pos);
 }
 
-
-std::regex Service::genRegExpr (const std::string &pattern)
+std::list<std::string> Service::filterPols (const HttpContextPtr& ctx, const std::list<std::string> &polnames)
 {
-    std::string rex = Tools::replaceAll(Tools::replaceAll(pattern, ".", "\\."), "*", ".*");
-
-    std::stringstream ss(rex);
-    std::string token;
-
-    if (pattern.find(',') != std::string::npos) {
-        std::string res = "";
-        while (std::getline(ss, token, ',')) {
-            if (!res.empty()) res += "|";
-            res += token;
-        }
-        rex = "("+res+")";
-    }
-    rex = "(^" + rex + "$)";
-    // std::cout << "PATTERN("<< pattern << ") ==> " << rex << std::endl;
-    return std::regex(rex, std::regex_constants::icase);
-}
-
-void Service::filterPols (const HttpContextPtr& ctx, std::list<std::string> &polnames)
-{
-    auto it = polnames.begin();
-    bool filterNamespaces = false;
     bool filterNames = false;
-    std::string namespacePattern;
     std::string namePattern;
-
-    const auto nsParam = ctx->param("namespace", "*");
-    if (!nsParam.empty() && nsParam != "*") {
-        filterNamespaces = true;
-        namespacePattern = ctx->param("namespace");
-    }
 
     const auto nameParam = ctx->param("name", "*");
     if (!nameParam.empty() && nameParam != "*") {
@@ -76,89 +48,123 @@ void Service::filterPols (const HttpContextPtr& ctx, std::list<std::string> &pol
         namePattern = ctx->param("name");
     }
 
-    if (!filterNamespaces && !filterNames) {
-        return;
+    if (!filterNames) {
+        return polnames;
     }
 
-    std::regex namespaceRegex = genRegExpr(namespacePattern);
-    std::regex nameRegex = genRegExpr(namePattern);
-
-    while (it != polnames.end()) {
-        auto ns = getNamespace(*it);
-        if ((filterNamespaces && !std::regex_search(ns, namespaceRegex)) ||
-            (filterNames && !std::regex_search(*it, nameRegex))) {
-            it = polnames.erase(it);
-            continue;
+    std::stringstream ss(namePattern);
+    std::string pattern;
+    std::list<std::string> result;
+    auto included = new bool[polnames.size()]();
+    while (std::getline(ss, pattern, ',')) {
+        std::regex rex = std::regex("(^" + Tools::replaceAll(Tools::replaceAll(pattern, ".", "\\."), "*", ".*") + "$)");
+        uint index = 0;
+        for (auto it = polnames.cbegin(); it != polnames.cend(); ++it, ++index) {
+            if (included[index]) continue;
+            if (!std::regex_search(*it, rex)) continue;
+            included[index] = true;
+            result.push_back(*it);
         }
-        ++it;
     }
+    delete [] included;
+    return result;
 }
-/*
-Reference *Service::getReference(const std::string &name)
-{
-    try {
 
+
+Service::QueryOptions Service::parseOptions (const HttpContextPtr& ctx)
+{
+    QueryOptions options;
+    options.count = strtoull(ctx->param("count", "10").c_str(), NULL, 10);
+    if (options.count > 200) options.count = 200;
+    options.from = strtoull(ctx->param("from", "0").c_str(), NULL, 10);
+    options.nozeros = ctx->param("nozeros", "false") != "false";
+    options.changes = ctx->param("changes", "false") != "false";
+    options.compact = ctx->param("compact", "false") != "false";
+    options.hex = ctx->param("hex", "false") != "false";
+    options.before = strtoull(ctx->param("before", "0").c_str(), NULL, 10);
+    options.after = strtoull(ctx->param("after", "0").c_str(), NULL, 10);
+    options.skip = strtoull(ctx->param("skip", "0").c_str(), NULL, 10);
+    options.exportTo = ctx->param("export", "");
+    options.trigger = ctx->param("trigger");
+    options.filter = ctx->param("filter");
+
+    std::transform(options.exportTo.begin(), options.exportTo.end(), options.exportTo.begin(),
+            [](unsigned char c){ return std::tolower(c); });
+
+    if (options.compact) {
+        options.changes = false;
+        options.nozeros = false;
+        options.hex = false;
     }
-    catch (const std::exception &e) {
-        responseStatus(ctx->response.get(), 500, e.what());
-    }
-    return NULL;
+    return options;
 }
-*/
-int Service::query(const HttpContextPtr& ctx)
+
+omega_t Service::getTriggeredOmega (const QueryOptions &options, omega_t w)
+{
+    auto pos = options.trigger.find(':');
+    std::string polname = options.trigger.substr(0, pos);
+    FrElement value = Goldilocks::fromString(options.trigger.substr(pos + 1), 10);
+    auto ref = engine.getDirectReference(polname);
+    for (uint index = 0; index <= options.skip; ++index) {
+        while (w < engine.n && !Goldilocks::equal(ref->getEvaluation(w), value)) {
+            ++w;
+        }
+    }
+    w -= options.before;
+    return w;
+}
+
+omega_t Service::filterSetup (const QueryOptions &options, omega_t w, FilterInfo &filter)
+{
+    if (!(filter.active = (options.filter != ""))) {
+        return w;
+    }
+
+    auto pos = options.filter.find(':');
+    std::string polname = options.filter.substr(0, pos);
+    filter.value = Goldilocks::fromString(options.filter.substr(pos + 1), 10);
+    filter.reference = engine.getDirectReference(polname);
+    while (w < engine.n && !Goldilocks::equal(filter.reference->getEvaluation(w), filter.value)) {
+        ++w;
+    }
+    w -= options.before;
+    filter.nextW = w;
+    return w;
+}
+
+omega_t Service::filterRows (const QueryOptions &options, omega_t w, FilterInfo &filter)
+{
+    if (!filter.active || !filter.reference || filter.nextW != w) {
+        return w;
+    }
+
+    while (w < engine.n && !Goldilocks::equal(filter.reference->getEvaluation(w), filter.value)) {
+        ++w;
+    }
+
+    w -= options.before;
+    filter.nextW = w + options.after + 1;
+
+    return w;
+}
+
+int Service::query (const HttpContextPtr& ctx)
 {
     try {
         json j;
-        uint count = strtoull(ctx->param("count", "10").c_str(), NULL, 10);
-        if (count > 200) count = 200;
-        omega_t w = strtoull(ctx->param("from", "0").c_str(), NULL, 10);
-        bool nozeros = ctx->param("nozeros", "false") != "false";
-        bool changes = ctx->param("changes", "false") != "false";
-        bool compact = ctx->param("compact", "false") != "false";
-        bool hex = ctx->param("hex", "false") != "false";
-        uint before = strtoull(ctx->param("before", "0").c_str(), NULL, 10);
-        uint after = strtoull(ctx->param("after", "0").c_str(), NULL, 10);
-        int skip = strtoull(ctx->param("skip", "0").c_str(), NULL, 10);
-        std::string trigger = ctx->param("trigger");
-        std::string filter = ctx->param("filter");
-
-        if (compact) {
-            changes = false;
-            nozeros = false;
-            hex = false;
-        }
+        auto options = parseOptions(ctx);
+        omega_t w = options.from;
 
         std::list<std::string> pols;
         engine.listReferences(pols);
-        filterPols(ctx, pols);
+        pols = filterPols(ctx, pols);
 
-        if (trigger != "") {
-            auto pos = trigger.find(':');
-            std::string polname = trigger.substr(0, pos);
-            FrElement value = Goldilocks::fromString(trigger.substr(pos + 1), 10);
-            auto ref = engine.getDirectReference(polname);
-            while (skip >= 0) {
-                while (w < engine.n && !Goldilocks::equal(ref->getEvaluation(w), value)) {
-                    ++w;
-                }
-                --skip;
-            }
-            w -= before;
+        if (options.trigger != "") {
+            w = getTriggeredOmega(options, w);
         }
 
-        FrElement filterValue;
-        const Reference *filterRef = NULL;
-        if (filter != "") {
-            auto pos = filter.find(':');
-            std::string polname = filter.substr(0, pos);
-            filterValue = Goldilocks::fromString(filter.substr(pos + 1), 10);
-            filterRef = engine.getDirectReference(polname);
-            while (w < engine.n && !Goldilocks::equal(filterRef->getEvaluation(w), filterValue)) {
-                ++w;
-            }
-            w -= before;
-        }
-        omega_t nextFilterW = w;
+        FilterInfo filter;
+        w = filterSetup(options, w, filter);
 
         std::list<const Reference *> references;
         for (auto it = pols.begin(); it != pols.end(); ++it) {
@@ -166,34 +172,32 @@ int Service::query(const HttpContextPtr& ctx)
         }
         json jValues = {};
         uint64_t evaluations[pols.size()];
-        for (uint row = 0; row < count; ++row) {
+        for (uint row = 0; row < options.count; ++row) {
+            w = filterRows(options, w, filter);
             if (w >= engine.n) break;
-            if (filterRef && nextFilterW == w) {
-                while (w < engine.n && !Goldilocks::equal(filterRef->getEvaluation(w), filterValue)) {
-                    ++w;
-                }
-                w -= before;
-                nextFilterW = w + after + 1;
-            }
             json jEvaluations;
-            if (compact) {
-                jEvaluations.push_back(w);
+            if (options.compact) {
+                jEvaluations.push_back(std::to_string(w));
             } else {
-                jEvaluations["!w!"] = w;
+                jEvaluations["!w!"] = std::to_string(w);
             }
             auto itRef = references.begin();
             uint index = 0;
             for (auto it = pols.begin(); it != pols.end(); ++it) {
                 uint64_t value = Goldilocks::toU64((*itRef)->getEvaluation(w));
-                if ((value || !nozeros) && (!row || !changes || value != evaluations[index])) {
-                    if (hex) {
-                        char tmp[64];
+                if ((value || !options.nozeros) && (!row || !options.changes || value != evaluations[index])) {
+                    // max 20/18 chars
+                    char tmp[32];
+                    if (options.hex) {
                         snprintf(tmp, sizeof(tmp), "0x%0lX", value);
                         jEvaluations[*it] = tmp;
-                    } else if (compact) {
-                        jEvaluations.push_back(value);
                     } else {
-                        jEvaluations[*it] = value;
+                        snprintf(tmp, sizeof(tmp), "%lu", value);
+                        if (options.compact) {
+                            jEvaluations.push_back(tmp);
+                        } else {
+                            jEvaluations[*it] = tmp;
+                        }
                     }
                 }
                 ++itRef;
@@ -202,14 +206,7 @@ int Service::query(const HttpContextPtr& ctx)
             jValues.push_back(jEvaluations);
             ++w;
         }
-        if (compact) {
-            j["titles"] = {"w"};
-            for (auto it = pols.begin(); it != pols.end(); ++it) {
-                j["titles"].push_back(*it);
-            }
-        }
-        j["values"] = jValues;
-        return ctx->sendJson(j);
+        return generateQueryOutput(ctx, options, j, jValues, pols);
     }
     catch (const std::exception &e) {
         responseStatus(ctx->response.get(), 500, e.what());
@@ -218,12 +215,73 @@ int Service::query(const HttpContextPtr& ctx)
     return 500;
 }
 
+int Service::generateQueryOutput (const HttpContextPtr& ctx, const QueryOptions &options, json &j, json &jValues, const std::list<std::string> &pols)
+{
+    if (options.compact) {
+        j["titles"] = {"w"};
+        for (auto it = pols.begin(); it != pols.end(); ++it) {
+            j["titles"].push_back(*it);
+        }
+    }
+    j["values"] = jValues;
+    if (options.exportTo != "") {
+        std::stringstream sfilename;
+        auto t = std::time(nullptr);
+        auto tm = *std::gmtime(&t);
+        sfilename << std::put_time(&tm, "%Y%m%d_%H%M%S_") << options.from << "_" << options.count << "." << options.exportTo;
+        if (options.exportTo == "csv") {
+            std::string content = jsonQueryToCsv(j);
+            ctx->response->headers["Content-disposition"] = "attachment;filename=" + sfilename.str();
+            return ctx->send(content, TEXT_CSV);
+        }
+        if (options.exportTo == "txt") {
+            ctx->response->headers["Content-disposition"] = "attachment;filename=" + sfilename.str();
+            std::string content = jsonQueryToTxt(j);
+            return ctx->send(content, TEXT_PLAIN);
+        }
+    }
+    return ctx->sendJson(j);
+}
+
+std::string Service::jsonQueryToCsv (json &j)
+{
+    return jsonQueryToTextFormat(j, true, ',');
+}
+
+std::string Service::jsonQueryToTxt (json &j)
+{
+    return jsonQueryToTextFormat(j, false, ',');
+}
+
+std::string Service::jsonQueryToTextFormat (json &j, bool numbersAsString, char separator)
+{
+    std::stringstream content;
+    const auto titles = j["titles"];
+    for (auto it = titles.cbegin(); it != titles.cend(); ++it) {
+        if (it != titles.cbegin()) content << separator;
+        content << '"' << (*it).get<std::string>() << '"';
+    }
+    content << "\n";
+
+    const auto rows = j["values"];
+    uint irow = 0;
+    std::string numberDelimiter = numbersAsString ? "\"":"";
+    for (auto row = rows.cbegin(); row != rows.cend(); ++row, ++irow) {
+        uint icol = 0;
+        for (auto it = (*row).cbegin(); it != (*row).cend(); ++it, ++icol) {
+            if (it != (*row).cbegin()) content << separator;
+            content << numberDelimiter << (*it).get<std::string>() << numberDelimiter;
+        }
+        content << "\n";
+    }
+    return content.str();
+}
+
 int Service::pols(const HttpContextPtr& ctx)
 {
     json j;
     std::list<std::string> polnames;
     engine.listReferences(polnames);
-    filterPols(ctx, polnames);
     j["pols"] = polnames;
     return ctx->sendJson(j);
 }
