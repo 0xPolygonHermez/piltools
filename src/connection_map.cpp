@@ -24,10 +24,9 @@ ConnectionMap::~ConnectionMap (void)
     if (ijTable) delete [] ijTable;
 }
 
-void ConnectionMap::updatePercent(uint64_t done)
+void ConnectionMap::updatePercent(const std::string &title, uint64_t done, uint64_t total)
 {
-    const uint64_t total = n * nk;
-    std::cout << "Preparing ConnectionMap " << pil::Tools::percentBar(done, total);
+    std::cout << title << " " << pil::Tools::percentBar(done, total);
 
     if (done == total) {
         std::cout << std::endl << std::flush;
@@ -38,9 +37,7 @@ void ConnectionMap::updatePercent(uint64_t done)
 
 void ConnectionMap::generate (void)
 {
-#ifdef __CONNECTION_MAP_STATISTICS__
     auto startT = Tools::startCrono();
-#endif
     FrElement ks[nk];
     ks[0] = Goldilocks::one();
     getKs(ks+1, nk-1);
@@ -48,23 +45,29 @@ void ConnectionMap::generate (void)
     const FrElement wi = Goldilocks::w(pow);
     uint64_t *elements = new uint64_t[n];
 
+    const std::string calculatingTitle = "Calculating w ... ";
     FrElement w = Goldilocks::one();
     for (dim_t i = 0; i < n; ++i) {
         uint64_t u64 = Goldilocks::toU64(w);
         elements[i] = u64;
         w = Goldilocks::mul(w, wi);
+        if (i % 10000 == 0) {
+            updatePercent(calculatingTitle, i, n);
+        }
     }
+    updatePercent(calculatingTitle, n, n);
 
     hashTable = new uint64_t[hashSize];
     ijTable = new uint64_t[hashSize];
     memset(hashTable, 0xFF, sizeof(uint64_t)*hashSize);
 
-#ifdef __CONNECTION_MAP_STATISTICS__
     uint64_t collision = 0;
     uint64_t maxCost = 0;
-#endif
+
+    const uint64_t total = n * nk;
+    const std::string PreparingTitle = "Preparing ConnectionMap ...";
     for (dim_t j = 0; j < nk; ++j) {
-        updatePercent(j*nk);
+        updatePercent(PreparingTitle, j*n, total);
         for (dim_t i = 0; i < n; ++i) {
             uint64_t value = j == 0 ? elements[i] : Goldilocks::toU64(Goldilocks::mul(ks[j], ((FrElement *)elements)[i]));
             uint64_t key = hash(value);
@@ -77,27 +80,21 @@ void ConnectionMap::generate (void)
                 }
                 key = hash(value, cost);
                 ++cost;
-#ifdef __CONNECTION_MAP_STATISTICS__
                 ++collision;
-#endif
             }
-#ifdef __CONNECTION_MAP_STATISTICS__
             if (cost > maxCost) maxCost = cost;
-#endif
             if (i % 10000 == 0) {
-                updatePercent(j*nk+i);
+                updatePercent(PreparingTitle, j*nk+i, total);
             }
             hashTable[key] = value;
             ijTable[key] = j << 32 | i;
             ++count;
         }
     }
-    updatePercent(n*nk);
+    updatePercent(PreparingTitle, n*nk, total);
 
-#ifdef __CONNECTION_MAP_STATISTICS__
     Tools::endCronoAndShowIt(startT);
     std::cout << "SIZE(MB):" << (hashSize >> 16) << " COLLISIONS:" << collision << " MAXCOST:" << maxCost << " AVG.COST" << (((double)nk * n) + collision) / ((double)nk * n) << std::endl;
-#endif
 
 
 #ifdef __CONNECTION_MAP_VERIFY__

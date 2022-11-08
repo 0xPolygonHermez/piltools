@@ -31,7 +31,7 @@ class ConnectionMap {
         uint64_t *ijTable;
         uint64_t count;
         void generate (void);
-        void updatePercent (uint64_t done);
+        void updatePercent(const std::string &title, uint64_t done, uint64_t total);
 };
 
 }
