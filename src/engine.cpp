@@ -301,7 +301,7 @@ void Engine::loadPublics (void)
 
         FrElement value;
         if (publicsLoaded) {
-            Goldilocks::fromString(publicsJson[id]);
+            value = Goldilocks::fromString(publicsJson[id]);
         } else {
             auto type = getReferenceType(name, polType);
             switch(type) {
@@ -339,7 +339,7 @@ void Engine::checkConnectionIdentities (void)
 
     auto connectionIdentities = pil["connectionIdentities"];
     for (auto it = connectionIdentities.begin(); it != connectionIdentities.end(); ++it) {
-        const std::string where = (*it)["fileName"].get<std::string>(); + ":" + (*it)["line"].get<std::string>();
+        const std::string where = (*it)["fileName"].get<std::string>(); + ":" + std::to_string((*it)["line"].get<uint64_t>());
         std::cout << "connection " << where << std::endl;
         assert((*it)["pols"].size() == (*it)["connections"].size());
         dim_t polsCount = (*it)["pols"].size();
@@ -372,7 +372,7 @@ void Engine::checkConnectionIdentities (void)
                         const std::string p2name = expressions.getName(pols[_j]);
                         std::cout << where << " connection does not match " << (p1name.empty() ? "p1":p1name) << "(id:" << j << ")[w=" << w << "] "
                                   << (p2name.empty() ? "p2":p2name) << "(id:" << _j << ")[w=" << _i << "] "
-                                  << " v1:" << Goldilocks::toString(v1) << " v2:" << Goldilocks::toString(v1) << std::endl;
+                                  << " v1:" << Goldilocks::toString(v1) << " v2:" << Goldilocks::toString(v2) << std::endl;
                     }
                 }
             }

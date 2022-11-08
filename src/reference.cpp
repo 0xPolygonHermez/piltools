@@ -18,6 +18,9 @@ Reference::Reference (References &parent, uid_t id, dim_t len, index_t index, Re
 {
     polDeg = 0;
     isArray = len > 1;
+/*    if (isArray) {
+        this->name = name + "[" + std::to_string(index)+"]";
+    }*/
 }
 
 }

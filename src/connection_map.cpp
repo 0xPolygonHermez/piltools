@@ -56,6 +56,7 @@ void ConnectionMap::generate (void)
         }
     }
     updatePercent(calculatingTitle, n, n);
+    std::cout << "allocating map ..." << std::endl;
 
     hashTable = new uint64_t[hashSize];
     ijTable = new uint64_t[hashSize];
@@ -84,7 +85,7 @@ void ConnectionMap::generate (void)
             }
             if (cost > maxCost) maxCost = cost;
             if (i % 10000 == 0) {
-                updatePercent(PreparingTitle, j*nk+i, total);
+                updatePercent(PreparingTitle, j*n+i, total);
             }
             hashTable[key] = value;
             ijTable[key] = j << 32 | i;

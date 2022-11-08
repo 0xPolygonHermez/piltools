@@ -58,7 +58,7 @@ function refreshTable()
         let values = polJson.values[ivalues];
         if (typeof values[0] == 'string') values[0] = BigInt(values[0]);
         content += '<tr><th align="right" scope="row">' + values[0] + '</th>';
-        for (let index = 1; index < polJson.values[ivalues].length; ++index) {
+        for (let index = 1; index < values.length; ++index) {
             if (typeof values[index] == 'string') {
                 values[index] = BigInt(values[index])
             }
