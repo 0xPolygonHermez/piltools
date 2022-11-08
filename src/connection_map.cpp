@@ -94,7 +94,8 @@ void ConnectionMap::generate (void)
     updatePercent(PreparingTitle, n*nk, total);
 
     Tools::endCronoAndShowIt(startT);
-    std::cout << "SIZE(MB):" << (hashSize >> 16) << " COLLISIONS:" << collision << " MAXCOST:" << maxCost << " AVG.COST" << (((double)nk * n) + collision) / ((double)nk * n) << std::endl;
+    // sizeof(uint64) * 2 * 1024 * 2024 = 3 + 1 + 10 + 10 = 24
+    std::cout << "SIZE(MB):" << (hashSize >> 24) << " Collisions:" << collision << " MaxCost:" << maxCost << " Avg.Cost:" << (((double)nk * n) + collision) / ((double)nk * n) << std::endl;
 
 
 #ifdef __CONNECTION_MAP_VERIFY__
@@ -103,7 +104,7 @@ void ConnectionMap::generate (void)
         for (dim_t i = 0; i < n; ++i) {
             uint64_t value = j == 0 ? elements[i] : Goldilocks::toU64(Goldilocks::mul(ks[j], ((FrElement *)elements)[i]));
             uint64_t res = get(value);
-            if (res == 0xFFFFFFFFFFFFFFFFULL) {
+            if (res == NONE) {
                 std::cout << "UPS!! not found value:" << value << std::endl;
                 exit(1);
             }
@@ -114,12 +115,12 @@ void ConnectionMap::generate (void)
                 exit(1);
             }
             res = get(value+1);
-            if (res != 0xFFFFFFFFFFFFFFFFULL) {
+            if (res != NONE) {
                 std::cout << "UPS!! found unexpected value:" << value+1 << std::endl;
                 exit(1);
             }
             res = get(value-1);
-            if (res != 0xFFFFFFFFFFFFFFFFULL) {
+            if (res != NONE) {
                 std::cout << "UPS!! found unexpected value:" << value-1 << std::endl;
                 exit(1);
             }
@@ -134,14 +135,14 @@ uint64_t ConnectionMap::get (uint64_t value)
 {
     uint64_t key = hash(value);
     uint64_t cost = 1;
-    while (hashTable[key] != 0xFFFFFFFFFFFFFFFFULL && cost < count)  {
+    while (hashTable[key] != NONE && cost < count)  {
         if (hashTable[key] == value) {
             return ijTable[key];
         }
         key = hash(value, cost);
         ++cost;
     }
-    return 0xFFFFFFFFFFFFFFFFULL;
+    return NONE;
 }
 
 uint64_t ConnectionMap::hash(uint64_t value, uint deep)

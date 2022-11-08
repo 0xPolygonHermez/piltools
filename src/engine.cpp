@@ -339,7 +339,8 @@ void Engine::checkConnectionIdentities (void)
 
     auto connectionIdentities = pil["connectionIdentities"];
     for (auto it = connectionIdentities.begin(); it != connectionIdentities.end(); ++it) {
-        std::cout << "connection " << (*it)["fileName"] << ":" << (*it)["line"] << std::endl;
+        const std::string where = (*it)["fileName"].get<std::string>(); + ":" + (*it)["line"].get<std::string>();
+        std::cout << "connection " << where << std::endl;
         assert((*it)["pols"].size() == (*it)["connections"].size());
         dim_t polsCount = (*it)["pols"].size();
         uid_t pols[polsCount];
@@ -360,11 +361,18 @@ void Engine::checkConnectionIdentities (void)
                     auto v1 = expressions.getEvaluation(pols[j], w);
                     auto a = Goldilocks::toU64(expressions.getEvaluation(connections[j], w));
                     uint64_t _ij = cm.get(a);
+                    if (_ij == ConnectionMap::NONE) {
+
+                    }
                     uint64_t _i = cm.ij2i(_ij);
                     uint64_t _j = cm.ij2j(_ij);
                     auto v2 = expressions.getEvaluation(pols[_j], _i);
                     if (!Goldilocks::equal(v1, v2)) {
-                        std::cout << "MAMA,MIA !!" << std::endl;
+                        const std::string p1name = expressions.getName(pols[j]);
+                        const std::string p2name = expressions.getName(pols[_j]);
+                        std::cout << where << " connection does not match " << (p1name.empty() ? "p1":p1name) << "(id:" << j << ")[w=" << w << "] "
+                                  << (p2name.empty() ? "p2":p2name) << "(id:" << _j << ")[w=" << _i << "] "
+                                  << " v1:" << Goldilocks::toString(v1) << " v2:" << Goldilocks::toString(v1) << std::endl;
                     }
                 }
             }

@@ -10,7 +10,7 @@ namespace pil {
 
 class ConnectionMap {
     public:
-        const uint64_t NONE = 0xFFFFFFFFFFFFFFFF;
+        static const uint64_t NONE = 0xFFFFFFFFFFFFFFFF;
 
         ConnectionMap (dim_t n, uint nk, uint factor = 8);
         ~ConnectionMap (void);
