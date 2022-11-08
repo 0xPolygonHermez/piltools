@@ -37,12 +37,14 @@ Engine::Engine(EngineOptions options)
     n = 0;
     nCommitments = 0;
     nConstants = 0;
+    publicsLoaded = false;
 
     checkOptions();
     loadJsonPil();
     loadReferences();
     loadConstantsFile();
     loadCommitedFile();
+    loadPublicsFile();
     loadPublics();
 
     loadAndCompileExpressions();
@@ -187,6 +189,17 @@ void Engine::loadJsonPil (void)
     pil = nlohmann::json::parse(pilFile);
 }
 
+void Engine::loadPublicsFile (void)
+{
+    std::cout << "loadPublicsFile(" << options.publicsFilename << ")" << std::endl;
+    if (!options.publicsFilename.empty()) {
+        std::ifstream jsonFile(options.publicsFilename);
+        publicsJson = nlohmann::json::parse(jsonFile);
+        publicsLoaded = true;
+        std::cout << "Loaded publics from " << options.publicsFilename << std::endl;
+    }
+}
+
 void Engine::loadConstantsFile (void)
 {
     constPols = (FrElement *)mapFile("constant", options.constFilename);
@@ -278,6 +291,7 @@ void Engine::loadReferences (void)
 void Engine::loadPublics (void)
 {
     auto pilPublics = pil["publics"];
+
     for (nlohmann::json::iterator it = pilPublics.begin(); it != pilPublics.end(); ++it) {
         std::string name = (*it)["name"];
         uid_t polId = (*it)["polId"];
@@ -285,18 +299,22 @@ void Engine::loadPublics (void)
         uid_t id = (*it)["id"];
         std::string polType = (*it)["polType"];
 
-        auto type = getReferenceType(name, polType);
         FrElement value;
-        switch(type) {
-            case ReferenceType::cmP:
-                value = cmRefs.getEvaluation(polId, idx);
-                break;
-            case ReferenceType::imP:
-                // TODO: calculateValues
-                // value = imRefs.getPolValue(polId, idx);
-                throw std::runtime_error("imP reference "+name+" not supported yet");
-            default:
-                throw std::runtime_error("Invalid type "+polType+" for public "+name);
+        if (publicsLoaded) {
+            Goldilocks::fromString(publicsJson[id]);
+        } else {
+            auto type = getReferenceType(name, polType);
+            switch(type) {
+                case ReferenceType::cmP:
+                    value = cmRefs.getEvaluation(polId, idx);
+                    break;
+                case ReferenceType::imP:
+                    // TODO: calculateValues
+                    // value = imRefs.getPolValue(polId, idx);
+                    throw std::runtime_error("imP reference "+name+" not supported yet");
+                default:
+                    throw std::runtime_error("Invalid type "+polType+" for public "+name);
+            }
         }
         publics.add(id, name, value);
     }

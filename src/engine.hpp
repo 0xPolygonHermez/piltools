@@ -27,6 +27,7 @@ class EngineOptions {
         std::string pilJsonFilename = "";
         std::string constFilename = "";
         std::string commitFilename = "";
+        std::string publicsFilename = "";
         bool loadExpressions = false;
         bool saveExpressions = false;
         std::string expressionsFilename = "";
@@ -82,13 +83,18 @@ class Engine {
         void listReferences (std::list<std::string> &names, bool expandArrays = true);
     protected:
         nlohmann::json pil;
+        nlohmann::json publicsJson;
+
         std::map<void *,size_t> mappings;
         std::stack<uint64_t> blockTs;
+
+        bool publicsLoaded;
 
         void checkOptions (void);
 
         void loadConstantsFile (void);
         void loadCommitedFile (void);
+        void loadPublicsFile (void);
         void loadJsonPil (void);
         void mapExpressionsFile (bool wr = false);
 

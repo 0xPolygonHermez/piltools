@@ -24,6 +24,18 @@ ConnectionMap::~ConnectionMap (void)
     if (ijTable) delete [] ijTable;
 }
 
+void ConnectionMap::updatePercent(uint64_t done)
+{
+    const uint64_t total = n * nk;
+    std::cout << "Preparing ConnectionMap " << pil::Tools::percentBar(done, total);
+
+    if (done == total) {
+        std::cout << std::endl << std::flush;
+    } else {
+        std::cout << "\t\r" << std::flush;
+    }
+}
+
 void ConnectionMap::generate (void)
 {
 #ifdef __CONNECTION_MAP_STATISTICS__
@@ -52,6 +64,7 @@ void ConnectionMap::generate (void)
     uint64_t maxCost = 0;
 #endif
     for (dim_t j = 0; j < nk; ++j) {
+        updatePercent(j*nk);
         for (dim_t i = 0; i < n; ++i) {
             uint64_t value = j == 0 ? elements[i] : Goldilocks::toU64(Goldilocks::mul(ks[j], ((FrElement *)elements)[i]));
             uint64_t key = hash(value);
@@ -71,11 +84,15 @@ void ConnectionMap::generate (void)
 #ifdef __CONNECTION_MAP_STATISTICS__
             if (cost > maxCost) maxCost = cost;
 #endif
+            if (i % 10000 == 0) {
+                updatePercent(j*nk+i);
+            }
             hashTable[key] = value;
             ijTable[key] = j << 32 | i;
             ++count;
         }
     }
+    updatePercent(n*nk);
 
 #ifdef __CONNECTION_MAP_STATISTICS__
     Tools::endCronoAndShowIt(startT);
