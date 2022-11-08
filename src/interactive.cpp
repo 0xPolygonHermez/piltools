@@ -3,9 +3,13 @@
 #include <string>
 #include <iostream>
 
+#ifdef EDITLINE
 #include <editline/readline.h>
 #include <editline/history.h>
-
+#else
+#include <readline/readline.h>
+#include <readline/history.h>
+#endif
 namespace pil {
 
 Interactive::Interactive (Engine &engine)
