@@ -37,7 +37,7 @@ int main ( int argc, char *argv [])
         options.commitFilename = argv[1];
     }
 
-    while ((opt = getopt(argc, argv, "p:c:m:vV:j:S:l:s:id:P:")) != -1)
+    while ((opt = getopt(argc, argv, "p:c:m:vV:j:S:l:s:id:u:")) != -1)
     {
         switch (opt)
         {
@@ -81,7 +81,7 @@ int main ( int argc, char *argv [])
                 options.expressionsFilename = optarg;
                 break;
 
-            case 'P':
+            case 'u':
                 options.publicsFilename = optarg;
                 break;
 
