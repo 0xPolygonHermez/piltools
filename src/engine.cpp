@@ -333,6 +333,11 @@ void Engine::checkConnectionIdentities (void)
 {
     Block block("Connections");
 
+    if (pil["connectionIdentities"].size() == 0) {
+        std::cout << "No connections defined" << std::endl;
+        return;
+    }
+
     uint nk = getMaxConnectionColumns();
     std::cout << "Columns(max): " << nk << std::endl;
     ConnectionMap cm(n, nk);
@@ -410,6 +415,12 @@ void Engine::checkPlookupIdentities (void)
 
     auto identities = pil["plookupIdentities"];
     const dim_t identitiesCount = identities.size();
+
+    if (identitiesCount == 0) {
+        std::cout << "No plookups defined" << std::endl;
+        return;
+    }
+
     auto tt = new std::unordered_set<std::string>[identitiesCount];
     auto tCount = new dim_t[identitiesCount]();
     auto fCount = new dim_t[identitiesCount]();
@@ -478,6 +489,12 @@ void Engine::checkPermutationIdentities (void)
     Block block("Permutations checks");
     auto identities = pil["permutationIdentities"];
     const dim_t identitiesCount = identities.size();
+
+    if (identitiesCount == 0) {
+        std::cout << "No permutation checks defined" << std::endl;
+        return;
+    }
+
     auto tt = new std::unordered_map<std::string, int64_t>[identitiesCount];
 
     prepareT(identities, "Permutation", [tt](dim_t index, const std::string &value, omega_t w) {    auto it = tt[index].find(value);
@@ -633,6 +650,11 @@ void Engine::checkPolIdentities (void)
     auto polIdentities = pil["polIdentities"];
     dim_t polIdentitiesCount = polIdentities.size();
     dim_t errorCount = 0;
+
+    if (polIdentitiesCount == 0) {
+        std::cout << "No identities defined" << std::endl;
+        return;
+    }
 
     std::cout << "verify " << polIdentitiesCount << " polIdentities ....." << std::endl;
 
