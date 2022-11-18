@@ -120,11 +120,25 @@ omega_t Service::filterSetup (const QueryOptions &options, omega_t w, FilterInfo
         return w;
     }
 
-    auto pos = options.filter.find(':');
-    std::string polname = options.filter.substr(0, pos);
-    filter.value = Goldilocks::fromString(options.filter.substr(pos + 1), 10);
-    filter.reference = engine.getDirectReference(polname);
-    while (w < engine.n && !Goldilocks::equal(filter.reference->getEvaluation(w), filter.value)) {
+    std::stringstream fss(options.filter);
+    while (fss.good()) {
+        std::string cond;
+        getline(fss, cond, ',');
+
+        FilterInfoCond fcond;
+        auto pos = cond.find(':');
+        fcond.value =  Goldilocks::fromString(cond.substr(pos + 1), 10);
+        fcond.reference = engine.getDirectReference(cond.substr(0, pos));
+        filter.conds.push_back(fcond);
+    }
+    while (w < engine.n) {
+        auto it = filter.conds.begin();
+        while  (it != filter.conds.end() && Goldilocks::equal(it->reference->getEvaluation(w), it->value)) {
+            ++it;
+        }
+        if (it == filter.conds.end()) {
+            break;
+        }
         ++w;
     }
     w -= options.before;
@@ -134,11 +148,18 @@ omega_t Service::filterSetup (const QueryOptions &options, omega_t w, FilterInfo
 
 omega_t Service::filterRows (const QueryOptions &options, omega_t w, FilterInfo &filter)
 {
-    if (!filter.active || !filter.reference || filter.nextW != w) {
+    if (!filter.active || !filter.conds.size()) {
         return w;
     }
 
-    while (w < engine.n && !Goldilocks::equal(filter.reference->getEvaluation(w), filter.value)) {
+    while (w < engine.n) {
+        auto it = filter.conds.begin();
+        while  (it != filter.conds.end() && Goldilocks::equal(it->reference->getEvaluation(w), it->value)) {
+            ++it;
+        }
+        if (it == filter.conds.end()) {
+            break;
+        }
         ++w;
     }
 

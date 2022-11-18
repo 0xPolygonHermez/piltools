@@ -38,10 +38,14 @@ class Service {
                 std::string filter;
         };
 
-        class FilterInfo {
+        class FilterInfoCond {
             public:
                 FrElement value;
                 const Reference *reference;
+        };
+        class FilterInfo {
+            public:
+                std::list<FilterInfoCond> conds;
                 omega_t nextW;
                 bool active;
         };

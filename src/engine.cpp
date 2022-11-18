@@ -557,7 +557,7 @@ void Engine::prepareT (nlohmann::json& identities, const std::string &label, Set
 
         for (omega_t w = 0; w < n; ++w) {
             if (hasSelT && Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
-            if (identityIndex == 30) std::cout << "T;30;" << w << ";" << expressions.valuesToString(ts, tCount, w) << std::endl;
+            // if (identityIndex == 30) std::cout << "T;30;" << w << ";" << expressions.valuesToString(ts, tCount, w) << std::endl;
             set(identityIndex, expressions.valuesToBinString(ts, tCount, w), w);
         }
         updatePercentT("preparing "+label+" selT/T ", done, identitiesCount);
