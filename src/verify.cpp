@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <map>
 #include <string>
+#include <cstring>
 #include <sys/mman.h>
 #include <errno.h>
 #include "omp.h"
@@ -20,29 +21,6 @@
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
-#define FULL4
-
-#ifdef BASIC4
-// /home/ubuntu//zkevm-proverjs/build/v0.4.0.0-rc.1-basic/zkevm.expr
-const std::string basePath = "/home/ubuntu/zkevm-proverjs/build/v0.4.0.0-rc.1-basic/";
-const std::string pilJsonFilename = basePath + "basic_main.pil.json";
-const std::string constFilename = basePath + "zkevm.const";
-const std::string commitFilename = basePath + "zkevm.commit";
-#endif
-
-#ifdef FULL3
-const std::string basePath = "/home/ubuntu/zkevm-proverjs/build/v0.3.0.0-rc.1/";
-const std::string pilJsonFilename = basePath + "main.pil.json";
-const std::string constFilename = basePath + "zkevm.const";
-const std::string commitFilename = basePath + "zkevm.commit";
-#endif
-
-#ifdef FULL4
-const std::string basePath = "/home/ubuntu/zkevm-proverjs/build/v0.4.0.0-rc.1/";
-const std::string pilJsonFilename = basePath + "main.pil.json";
-const std::string constFilename = basePath + "zkevm.const";
-const std::string commitFilename = basePath + "zkevm.commit";
-#endif
 #include <getopt.h>
 void usage ( const std::string &prgname )
 {
@@ -60,7 +38,7 @@ int main ( int argc, char *argv [])
         options.commitFilename = argv[1];
     }
 
-    while ((opt = getopt(argc, argv, "p:c:m:vV:j:S:l:s:")) != -1)
+    while ((opt = getopt(argc, argv, "p:c:m:vV:j:S:l:s:id:u:")) != -1)
     {
         switch (opt)
         {
@@ -104,6 +82,25 @@ int main ( int argc, char *argv [])
                 options.expressionsFilename = optarg;
                 break;
 
+            case 'u':
+                options.publicsFilename = optarg;
+                break;
+
+            case 'i':
+                options.interactive = true;
+                break;
+
+            case 'd':
+            {
+                const bool disableAll = (strcasecmp(optarg, "ALL") == 0);
+                options.checkPlookups = !disableAll && strchr(optarg, 'O') == NULL;
+                options.checkPermutations = !disableAll && strchr(optarg, 'E') == NULL;
+                options.checkConnections = !disableAll && strchr(optarg, 'C') == NULL;
+                options.checkIdentities = !disableAll && strchr(optarg, 'I') == NULL;
+                options.calculateExpressions = !disableAll && strchr(optarg, 'X') == NULL;
+                break;
+            }
+
             default: /* '?' */
                 usage(argv[0]);
         }
@@ -120,22 +117,4 @@ int main ( int argc, char *argv [])
     exit(0);*/
 
     pil::Engine engine(options);
-
-    /*
-
-    exit(EXIT_SUCCESS);
-    pil::Engine engine({
-        pilJsonFilename : pilJsonFilename,
-        constFilename : constFilename,
-        commitFilename : commitFilename,
-        //        commitFilename: basePath + "zkevm.fake.commit",
-        //        loadExpressions: true,
-        //        saveExpressions: true,
-        expressionsFilename : basePath + "zkevm.fake.expr.bypols.bin"
-    });
-    // engine.getEvaluation("Main.STEP", 10);
-    // engine.getEvaluation("Arith.x1", 12, 3);
-    // engine.getEvaluation("Main.A0", 12);
-    // engine.getEvaluation("Main.STEP", 9584);
-    // std::cout << pil.dump() << std::endl;*/
 }

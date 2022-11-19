@@ -21,6 +21,11 @@
 #include "tools.hpp"
 #include "connection_map.hpp"
 #include "block.hpp"
+#include "cyclic.hpp"
+
+#ifdef PIL_VERIFY
+#include "interactive.hpp"
+#endif
 
 namespace pil {
 
@@ -32,22 +37,42 @@ Engine::Engine(EngineOptions options)
     n = 0;
     nCommitments = 0;
     nConstants = 0;
+    publicsLoaded = false;
 
     checkOptions();
     loadJsonPil();
     loadReferences();
     loadConstantsFile();
     loadCommitedFile();
+    loadPublicsFile();
     loadPublics();
 
     loadAndCompileExpressions();
-    calculateAllExpressions();
+    if (options.calculateExpressions) {
+        calculateAllExpressions();
+        imRefs.setExternalEvaluator([this](uid_t id, omega_t w, index_t index = 0) {return this->expressions.getEvaluation(id, w);});
+    }
 
-    checkPolIdentities();
-    checkPlookupIdentities();
-    checkPermutationIdentities();
-    checkConnectionIdentities();
+    if (options.checkIdentities) {
+        checkPolIdentities();
+    }
+    if (options.checkPlookups) {
+        checkPlookupIdentities();
+    }
+    if (options.checkPermutations) {
+        checkPermutationIdentities();
+    }
+    if (options.checkConnections) {
+        checkConnectionIdentities();
+    }
     std::cout << "done in " << Block::getTotalTime() << " ms" << std::endl;
+
+    #ifdef PIL_VERIFY
+    if (options.interactive) {
+        Interactive interactive(*this);
+        interactive.execute();
+    }
+    #endif
 }
 
 void *Engine::mapFile(const std::string &title, const std::string &filename, dim_t size, bool wr )
@@ -100,7 +125,21 @@ void Engine::unmapAll (void)
     mappings.clear();
 }
 
-FrElement Engine::getEvaluation(const std::string &name, omega_t w, index_t index )
+const Reference *Engine::getDirectReference(const std::string &name)
+{
+    auto pos = name.find('[');
+    if (pos != std::string::npos) {
+        auto epos = name.find(']', pos);
+        if (epos != std::string::npos && epos > (pos + 1)) {
+            uint index = strtoull(name.substr(pos+1, epos-pos-1).c_str(), NULL, 10);
+            auto reference = getReference(name.substr(0, pos));
+            return reference->getIndex(index);
+        }
+    }
+    return getReference(name);
+}
+
+const Reference *Engine::getReference(const std::string &name, index_t index )
 {
     auto pos = referencesByName.find(name);
     if (pos == referencesByName.end()) {
@@ -112,9 +151,13 @@ FrElement Engine::getEvaluation(const std::string &name, omega_t w, index_t inde
             throw std::runtime_error("Out of index on Reference "+name+"["+std::to_string(pRef->len)+"] with arrayIndex "+std::to_string(index));
         }
     }
-    FrElement evaluation = pRef->getEvaluation(w, index);
-    // std::cout << pRef->name << " = " << FrToString(evaluation) << std::endl;
-    return evaluation;
+    return pRef;
+}
+
+FrElement Engine::getEvaluation(const std::string &name, omega_t w, index_t index )
+{
+    const Reference *pRef = getReference(name, index);
+    return pRef->getEvaluation(w, index);
 }
 
 
@@ -144,6 +187,17 @@ void Engine::loadJsonPil (void)
 {
     std::ifstream pilFile(options.pilJsonFilename);
     pil = nlohmann::json::parse(pilFile);
+}
+
+void Engine::loadPublicsFile (void)
+{
+    std::cout << "loadPublicsFile(" << options.publicsFilename << ")" << std::endl;
+    if (!options.publicsFilename.empty()) {
+        std::ifstream jsonFile(options.publicsFilename);
+        publicsJson = nlohmann::json::parse(jsonFile);
+        publicsLoaded = true;
+        std::cout << "Loaded publics from " << options.publicsFilename << std::endl;
+    }
 }
 
 void Engine::loadConstantsFile (void)
@@ -219,6 +273,13 @@ void Engine::loadReferences (void)
         }
         if (ref) {
             referencesByName[name] = ref;
+            auto pos = name.find_first_of('.');
+            if (pos != std::string::npos) {
+                std::string ns = name.substr(0, pos);
+                if (std::find(namespaces.begin(), namespaces.end(), ns) == namespaces.end()) {
+                    namespaces.push_back(ns);
+                }
+            }
         }
     }
 
@@ -230,6 +291,7 @@ void Engine::loadReferences (void)
 void Engine::loadPublics (void)
 {
     auto pilPublics = pil["publics"];
+
     for (nlohmann::json::iterator it = pilPublics.begin(); it != pilPublics.end(); ++it) {
         std::string name = (*it)["name"];
         uid_t polId = (*it)["polId"];
@@ -237,18 +299,22 @@ void Engine::loadPublics (void)
         uid_t id = (*it)["id"];
         std::string polType = (*it)["polType"];
 
-        auto type = getReferenceType(name, polType);
         FrElement value;
-        switch(type) {
-            case ReferenceType::cmP:
-                value = cmRefs.getEvaluation(polId, idx);
-                break;
-            case ReferenceType::imP:
-                // TODO: calculateValues
-                // value = imRefs.getPolValue(polId, idx);
-                throw std::runtime_error("imP reference "+name+" not supported yet");
-            default:
-                throw std::runtime_error("Invalid type "+polType+" for public "+name);
+        if (publicsLoaded) {
+            value = Goldilocks::fromString(publicsJson[id]);
+        } else {
+            auto type = getReferenceType(name, polType);
+            switch(type) {
+                case ReferenceType::cmP:
+                    value = cmRefs.getEvaluation(polId, idx);
+                    break;
+                case ReferenceType::imP:
+                    // TODO: calculateValues
+                    // value = imRefs.getPolValue(polId, idx);
+                    throw std::runtime_error("imP reference "+name+" not supported yet");
+                default:
+                    throw std::runtime_error("Invalid type "+polType+" for public "+name);
+            }
         }
         publics.add(id, name, value);
     }
@@ -267,13 +333,19 @@ void Engine::checkConnectionIdentities (void)
 {
     Block block("Connections");
 
+    if (pil["connectionIdentities"].size() == 0) {
+        std::cout << "No connections defined" << std::endl;
+        return;
+    }
+
     uint nk = getMaxConnectionColumns();
     std::cout << "Columns(max): " << nk << std::endl;
     ConnectionMap cm(n, nk);
 
     auto connectionIdentities = pil["connectionIdentities"];
     for (auto it = connectionIdentities.begin(); it != connectionIdentities.end(); ++it) {
-        std::cout << "connection " << (*it)["fileName"] << ":" << (*it)["line"] << std::endl;
+        const std::string where = (*it)["fileName"].get<std::string>(); + ":" + std::to_string((*it)["line"].get<uint64_t>());
+        std::cout << "connection " << where << std::endl;
         assert((*it)["pols"].size() == (*it)["connections"].size());
         dim_t polsCount = (*it)["pols"].size();
         uid_t pols[polsCount];
@@ -294,11 +366,18 @@ void Engine::checkConnectionIdentities (void)
                     auto v1 = expressions.getEvaluation(pols[j], w);
                     auto a = Goldilocks::toU64(expressions.getEvaluation(connections[j], w));
                     uint64_t _ij = cm.get(a);
+                    if (_ij == ConnectionMap::NONE) {
+
+                    }
                     uint64_t _i = cm.ij2i(_ij);
                     uint64_t _j = cm.ij2j(_ij);
                     auto v2 = expressions.getEvaluation(pols[_j], _i);
                     if (!Goldilocks::equal(v1, v2)) {
-                        std::cout << "MAMA,MIA !!" << std::endl;
+                        const std::string p1name = expressions.getName(pols[j]);
+                        const std::string p2name = expressions.getName(pols[_j]);
+                        std::cout << where << " connection does not match " << (p1name.empty() ? "p1":p1name) << "(id:" << j << ")[w=" << w << "] "
+                                  << (p2name.empty() ? "p2":p2name) << "(id:" << _j << ")[w=" << _i << "] "
+                                  << " v1:" << Goldilocks::toString(v1) << " v2:" << Goldilocks::toString(v2) << std::endl;
                     }
                 }
             }
@@ -336,13 +415,23 @@ void Engine::checkPlookupIdentities (void)
 
     auto identities = pil["plookupIdentities"];
     const dim_t identitiesCount = identities.size();
+
+    if (identitiesCount == 0) {
+        std::cout << "No plookups defined" << std::endl;
+        return;
+    }
+
     auto tt = new std::unordered_set<std::string>[identitiesCount];
     auto tCount = new dim_t[identitiesCount]();
     auto fCount = new dim_t[identitiesCount]();
+    auto cyclic = new Cyclic[identitiesCount];
 
     auto startT = Tools::startCrono();
 
-    prepareT(identities, "Plookup", [tt, tCount](dim_t index, const std::string &value) { ++tCount[index]; tt[index].insert(value); return 0; });
+    prepareT(identities, "Plookup", [tt, tCount, cyclic](dim_t index, const std::string &value, omega_t w) {   cyclic[index].cycle(w);
+                                                                                                               ++tCount[index];
+                                                                                                               tt[index].insert(value);
+                                                                                                               return 0; });
     verifyF(identities, "Plookup", [tt, fCount,this](dim_t index, const std::string &value, omega_t w) {
                                                                         ++fCount[index];
                                                                         int result = tt[index].count(value);
@@ -350,19 +439,28 @@ void Engine::checkPlookupIdentities (void)
                                                                         return result; });
     Tools::endCronoAndShowIt(startT);
 
+    std::cout << "#   |SOURCE                                  |SELF(left)          |#F        |SELT(right)         |#T        |#T UNIQS  |NOTES" << std::endl;
+    std::cout << "----+----------------------------------------+--------------------+----------+--------------------+----------+----------+----------" << std::endl;
     for (dim_t index = 0; index < identitiesCount; ++index) {
-        const std::string selector = identities[index]["selT"].is_null() ? "(none)":expressions.getName(identities[index]["selT"]);
-        printf("%-40s|%20s|%10ld|%20s|%10ld|%10ld\n", (((std::string)identities[index]["fileName"])+ ":" +std::to_string((uint)(identities[index]["line"]))).c_str(),
-            selector.c_str(), (uint64_t)tCount[index], "", (uint64_t)fCount[index], (uint64_t)tt[index].size());
+        const bool hasSelT = identities[index]["selT"].is_null() == false;
+        const std::string selector = hasSelT ? expressions.getName(identities[index]["selT"]):"(none)";
+        std::stringstream notes;
+
+        if (cyclic[index].isCyclic() && hasSelT) {
+            notes << (cyclic[index].isCyclic(n) ? "full-":"") << "cyclic +" << cyclic[index].offset() << "/" << cyclic[index].period() << "  ";
+        }
+        printf("%-4ld|%-40s|%20s|%10ld|%20s|%10ld|%10ld|%s\n", index, (((std::string)identities[index]["fileName"])+ ":" +std::to_string((uint)(identities[index]["line"]))).c_str(),
+            "", (uint64_t)fCount[index], selector.c_str(), (uint64_t)tCount[index], (uint64_t)tt[index].size(), notes.str().c_str());
     }
 
     startT = Tools::startCrono();
     std::cout << "start to delete" << std::endl;
     #pragma omp parallel for
-    for (dim_t index = 0; index < identitiesCount+2; ++index) {
+    for (dim_t index = 0; index < identitiesCount + 3; ++index) {
         if (index < identitiesCount) tt[index].clear();
-        if (index == identitiesCount) delete [] tCount;
-        if (index > identitiesCount) delete [] fCount;
+        if (index == (identitiesCount + 0)) delete [] tCount;
+        if (index == (identitiesCount + 1)) delete [] fCount;
+        if (index == (identitiesCount + 2)) delete [] cyclic;
     }
     delete [] tt;
     Tools::endCronoAndShowIt(startT);
@@ -391,15 +489,21 @@ void Engine::checkPermutationIdentities (void)
     Block block("Permutations checks");
     auto identities = pil["permutationIdentities"];
     const dim_t identitiesCount = identities.size();
+
+    if (identitiesCount == 0) {
+        std::cout << "No permutation checks defined" << std::endl;
+        return;
+    }
+
     auto tt = new std::unordered_map<std::string, int64_t>[identitiesCount];
 
-    prepareT(identities, "Permutation", [tt](dim_t index, const std::string &value) { auto it = tt[index].find(value);
-                                                                                      if (it == tt[index].end()) {
-                                                                                        tt[index][value] = 1;
-                                                                                      } else {
-                                                                                        ++it->second;
-                                                                                      }
-                                                                                      return 0; });
+    prepareT(identities, "Permutation", [tt](dim_t index, const std::string &value, omega_t w) {    auto it = tt[index].find(value);
+                                                                                                    if (it == tt[index].end()) {
+                                                                                                        tt[index][value] = 1;
+                                                                                                    } else {
+                                                                                                        ++it->second;
+                                                                                                    }
+                                                                                                    return 0; });
     verifyF(identities, "Permutation", [tt, this](dim_t index, const std::string &value, omega_t w) {
                                                                                      auto it = tt[index].find(value);
                                                                                      if (it == tt[index].end()) {
@@ -453,7 +557,8 @@ void Engine::prepareT (nlohmann::json& identities, const std::string &label, Set
 
         for (omega_t w = 0; w < n; ++w) {
             if (hasSelT && Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
-            set(identityIndex, expressions.valuesToBinString(ts, tCount, w));
+            // if (identityIndex == 30) std::cout << "T;30;" << w << ";" << expressions.valuesToString(ts, tCount, w) << std::endl;
+            set(identityIndex, expressions.valuesToBinString(ts, tCount, w), w);
         }
         updatePercentT("preparing "+label+" selT/T ", done, identitiesCount);
     }
@@ -467,6 +572,7 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, Chec
     uint64_t done = 0;
 
     const uint64_t doneStep = n / 20;
+
     #pragma omp parallel for
     for (dim_t identityIndex = 0; identityIndex < identitiesCount; ++identityIndex) {
         const std::string plabel = label + "[" + std::to_string(identityIndex+1) + "/" + std::to_string(identitiesCount) + "] ";
@@ -488,6 +594,10 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, Chec
             omega_t w2 = (ichunk == (chunks - 1)) ? n: w1 + wn;
             for (omega_t w = w1; w < w2; ++w) {
                 if (hasSelF && Goldilocks::isZero(expressions.getEvaluation(selF, w))) continue;
+                #pragma omp critical
+                {
+                    if (identityIndex == 30) std::cout << "F;30;" << w << ";" << expressions.valuesToString(fs, fCount, w) << std::endl;
+                }
                 if (check(identityIndex, expressions.valuesToBinString(fs, fCount, w), w) == 0 ) {
                     ichunk = chunks;
                     w2 = n;
@@ -540,6 +650,11 @@ void Engine::checkPolIdentities (void)
     auto polIdentities = pil["polIdentities"];
     dim_t polIdentitiesCount = polIdentities.size();
     dim_t errorCount = 0;
+
+    if (polIdentitiesCount == 0) {
+        std::cout << "No identities defined" << std::endl;
+        return;
+    }
 
     std::cout << "verify " << polIdentitiesCount << " polIdentities ....." << std::endl;
 
@@ -645,6 +760,33 @@ bool Engine::checkFilename (const std::string &filename, bool toWrite, bool exce
         std::cerr << msg << std::endl;
     }
     return result;
+}
+/*
+template<typename T>
+void Engine::listReferences (T &names)
+{
+    constRefs.list(names);
+    cmRefs.list(names);
+    // imRefs.list(names);
+}
+*/
+
+void Engine::listReferences (std::list<std::string> &names, bool expandArrays)
+{
+    for (auto it = referencesByName.begin(); it != referencesByName.end(); ++it) {
+        const uint len = it->second->len;
+        if (expandArrays && len > 1) {
+            uint maxtmp = it->first.size() + 23;
+            char tmp[maxtmp];
+            for (uint index = 0; index < len; ++index) {
+                snprintf(tmp, maxtmp, "%s[%lu]", it->first.c_str(), index);
+                names.push_back(tmp);
+            }
+        } else {
+            names.push_back(it->first);
+        }
+    }
+    // imRefs.list(names);
 }
 
 }

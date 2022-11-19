@@ -3,7 +3,7 @@
 namespace pil {
 
 References::References (ReferenceType type)
-    :type(type)
+    :type(type), externalEvaluator(NULL)
 {
 }
 
@@ -41,6 +41,9 @@ void References::map(void *data)
 
 FrElement References::getEvaluation(uid_t id, omega_t w, index_t index)
 {
+    if (externalEvaluator) {
+        return externalEvaluator(id, w, index);
+    }
     uint64_t offset = (uint64_t)w * values.size() + id + index;
     return evaluations[offset];
 }

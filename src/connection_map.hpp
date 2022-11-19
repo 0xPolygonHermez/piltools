@@ -10,7 +10,7 @@ namespace pil {
 
 class ConnectionMap {
     public:
-        const uint64_t NONE = 0xFFFFFFFFFFFFFFFF;
+        static const uint64_t NONE = 0xFFFFFFFFFFFFFFFF;
 
         ConnectionMap (dim_t n, uint nk, uint factor = 8);
         ~ConnectionMap (void);
@@ -31,6 +31,7 @@ class ConnectionMap {
         uint64_t *ijTable;
         uint64_t count;
         void generate (void);
+        void updatePercent(const std::string &title, uint64_t done, uint64_t total);
 };
 
 }

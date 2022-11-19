@@ -9,7 +9,7 @@ std::string Tools::percentBar (uint64_t n, uint64_t total, bool percent, const s
     static const char *pendingBar = "                ";
     static const char *digits = "0123456789";
     std::string res = "[" + ansi;
-    uint done = (n << 7)/total;
+    uint done = total ? (n << 7)/total : 0;
     uint complete = done >> 3;
     uint partial = done & 0x07;
     uint pending = 16 - complete;
@@ -19,7 +19,7 @@ std::string Tools::percentBar (uint64_t n, uint64_t total, bool percent, const s
         --pending;
     }
     res += (pendingBar + 16 - pending);
-    uint perthousand = n * 1000/total;
+    uint perthousand = total ? n * 1000/total:0;
     res += "\x1B[0m]";
     if (percent) {
         res += " "+std::to_string(perthousand/10)+"."+digits[perthousand%10]+"%";
@@ -59,6 +59,22 @@ std::string Tools::humanSize ( uint64_t size )
         snprintf(output, sizeof(output), "%0.2f %s", unitSize, units[index]);
     }
     return output;
+}
+
+
+std::string Tools::replaceAll (const std::string &value, const std::string& search, const std::string& replace)
+{
+    std::string result = "";
+    size_t ppos = 0;
+    size_t pos = 0;
+    size_t len = search.size();
+    while((pos = value.find(search, ppos)) != std::string::npos) {
+        if (pos > ppos) result += value.substr(ppos, pos - ppos);
+        result += replace;
+        ppos = pos + len;
+    }
+    result += value.substr(ppos);
+    return result;
 }
 
 }

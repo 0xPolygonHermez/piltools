@@ -310,11 +310,20 @@ void Expressions::afterEvaluationsLoaded (void)
         // if (isAlias(iexpr)) continue;
         expressions[iexpr].setIsZeroFlag(true);
         expressions[iexpr].setEvaluatedFlag(true);
-        for (omega_t w = 0; w < n; ++w) {
+        omega_t w;
+        for (w = 0; w < n; ++w) {
             if (Goldilocks::isZero(getEvaluation(iexpr, w))) continue;
             expressions[iexpr].setIsZeroFlag(false, w);
             break;
         }
+        /*
+        #pragma omp critical
+        if (iexpr == 682 || iexpr == 689 || iexpr == 694 || iexpr == 695 || iexpr == 696 || iexpr == 697) {
+            std::cout << "E" << iexpr << ";W" << w << std::endl;
+            for (w = 0; w < n; ++w) {
+                std::cout << "E" << iexpr << ";" << w << ";" << Goldilocks::toString(getEvaluation(iexpr, w)) << std::endl;
+            }
+        }*/
     }
 }
 

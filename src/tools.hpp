@@ -35,6 +35,8 @@ class Tools {
 
         static uint64_t u64Log2 ( uint64_t value );
         static std::string humanSize ( uint64_t size );
+
+        static std::string replaceAll (const std::string &value, const std::string& search, const std::string& replace);
 };
 
 }
