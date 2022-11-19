@@ -21,7 +21,6 @@ class Expressions {
         Dependencies dependencies;
         Expression *expressions;
         dim_t cpus;
-        std::list<uid_t> *cpuGroups;
         dim_t n;
         uint count = 0;
         Engine &engine;
@@ -53,17 +52,35 @@ class Expressions {
         omega_t getFirstNonZeroEvaluation (uid_t expressionId) { return expressions[expressionId].getFirstNonZeroEvaluation(); };
         void expandAlias (void);
         std::string getName (uid_t expressionId);
+        Expression& operator[](uid_t index) { return expressions[index]; };
+        dim_t size (void) { return count; };
+
 //        std::string getTextFormula (uid_t expressionId);
     protected:
         FrElement *evaluations;
         uint64_t evaluationsDone;
         uint activeCpus;
+        class EvalGroup {
+            public:
+                uid_t groupId;
+                omega_t w1;
+                omega_t w2;
+                uint64_t cost;
+                uint icpu;
+                std::list<uid_t> expressions;
+        };
+        std::list<EvalGroup> evalGroups;
+
 
         void compileExpression (nlohmann::json &pilExpressions, uid_t id);
         void resetGroups (void);
         void mergeGroup (uid_t toId, uid_t fromId);
         void recursiveSetGroup (uid_t exprId, uid_t groupId);
         void updatePercentEvaluated (uint incDone = 0);
+        void updateEvalGroupWithDependencies ( void );
+        void compactGroupIds (void);
+        void setupGroups (void);
+
 };
 
 }

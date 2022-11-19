@@ -331,10 +331,10 @@ void Expressions::afterEvaluationsLoaded (void)
 void Expressions::evalAllCpuGroup (uid_t icpu)
 {
     dim_t depCount = dependencies.size();
-    for (uint idep = 0; idep < depCount; ++idep) {
-        const uid_t iexpr = dependencies[idep];
-        if (std::find(cpuGroups[icpu].begin(), cpuGroups[icpu].end(), expressions[iexpr].groupId) == cpuGroups[icpu].end()) continue;
-        for (omega_t w = 0; w < n; ++w) {
+    for (auto it = evalGroups.begin(); it != evalGroups.end(); ++i) {
+        if (it->icpu != icpu) continue;
+
+        for (omega_t w = it->w1; w < it->w2; ++w) {
             evaluations[ (uint64_t)n * iexpr + w ] = expressions[iexpr].eval(engine, w, iexpr == 222288);
         }
         expressions[iexpr].evaluated = true;
@@ -353,7 +353,6 @@ Expressions::Expressions (Engine &engine)
     externalEvaluations = false;
     checkEvaluated = true;
     cpus = omp_get_max_threads();
-    cpuGroups = new std::list<uid_t>[cpus];
 }
 
 Expressions::~Expressions (void)
@@ -398,62 +397,117 @@ void Expressions::recursiveSetGroup (uid_t exprId, uid_t groupId)
     expressions[exprId].groupId = groupId;
 }
 
-void Expressions::calculateGroup (void)
+
+void Expressions::setupGroups (void)
 {
-    resetGroups();
     uid_t groupId = 0;
     for (uid_t id = 0; id < count; ++id) {
         if (expressions[id].groupId != GROUP_NONE) continue;
         recursiveSetGroup(id, groupId);
         ++groupId;
     }
+}
+
+void Expressions::compactGroupIds (void)
+{
+
+
+}
+
+
+void Expressions::calculateGroup (void)
+{
+    resetGroups();
+    setupGroups();
+    compactGroupIds();
+
+    uid_t groupTranslate = new uid_t[count];
+
 
     dim_t *groupCounters = new dim_t[count]();
+    uint64_t *groupCosts = new uint64_t[count]();
+    uint64_t totalCost = 0;
     bool *groupHasNextExpressions = new bool[count]();
+    auto groupExpressions = list<uid_t>[count];
 
-    for (index_t index = 0; index < count; ++index) {
-        auto _groupId = expressions[index].groupId;
+//    for (index_t index = 0; index < count; ++index) {
+    for (uid_t idep = 0; idep < dependencies.size(); ++idep){
+        const uid_t iexpr = dependencies[idep];
+
+        auto _groupId = expressions[iexpr].groupId;
         ++groupCounters[_groupId];
-        if (expressions[index].nextExpression) {
+        const dim_t cost = expressions[iexpr].operations.size();
+        groupCosts[_groupId] += cost;
+        totalCost += cost;
+        if (expressions[iexpr].nextExpression) {
             groupHasNextExpressions[_groupId] = true;
         }
     }
 
     dim_t groupsWithElements = 0;
-    std::list<uid_t> groupsBySizeDesc;
+    std::list<uid_t> groupsByCost;
     for (index_t index = 0; index < count; ++index) {
         const dim_t expressionsInGroup = groupCounters[index];
         if (!expressionsInGroup) continue;
         ++groupsWithElements;
-        groupsBySizeDesc.push_back(index);
+        groupsByCost.push_back(index);
     }
-    groupsBySizeDesc.sort( [groupCounters]( const uid_t &a, const uid_t &b ) { return groupCounters[a] > groupCounters[b]; } );
+    groupsByCost.sort( [groupCosts]( const uid_t &a, const uid_t &b ) { return groupCosts[a] > groupCosts[b]; } );
 
-    dim_t *cpuGroupSizes = new dim_t[cpus]();
-    dim_t cpuGroupSizeTarget = (count / cpus) + ((count % cpus) != 0);
-    auto it = groupsBySizeDesc.begin();
+    dim_t *cpuGroupCosts = new dim_t[cpus]();
+    dim_t cpuGroupCostTarget = (totalCost / cpus) + 1;
+
+    std::cout << "cpuGroupCostTarget: " << cpuGroupCostTarget << std::endl;
+
+    for (auto it = groupsByCost.begin(); it != groupsByCost.end(); ++it) {
+        EvalGroup eg = {groupId: *it, w1: 0, w2: n, cost: groupCosts[*it]};
+        uint parts = cpuGroupCostTarget / groupCosts[*it];
+        if (parts <= 1) {
+            evalGroups.push_back(eg);
+            continue;
+        }
+        omega_t wpart = n / parts;
+        eg.cost = eg.cost / parts;
+        for (uint ipart = 0; ipart < parts; ++ipart) {
+            eg.w1 = wpart * ipart;
+            eg.w2 = (ipart == (parts - 1)) ? n : (eg.w1 + wpart);
+            evalGroups.push_back(eg);
+        }
+    }
+
+    updateEvalGroupWithDependencies();
+
+    auto it = evalGroups.begin();
+
 
     // TODO: if no next expressions => split in n parts the big groups
-    dim_t groupSize;
-    for (uint loop = 0; it != groupsBySizeDesc.end(); ++loop) {
-        for (uint icpu = 0; (icpu < cpus) && it != groupsBySizeDesc.end(); ++icpu) {
-            if (cpuGroupSizes[icpu] >= cpuGroupSizeTarget) continue;
-            groupId = *it;
-            groupSize = groupCounters[groupId];
-            cpuGroupSizes[icpu] += groupSize;
-            cpuGroups[icpu].push_back(groupId);
+    uint64_t groupCost;
+    uint loop = 0;
+    uint64_t remainingCost = 0;
+    uint64_t wFrom, wTo;
+    for (uint loop = 0; it != evalGroups.end(); ++loop) {
+        for (uint icpu = 0; (icpu < cpus) && it != evalGroups.end(); ++icpu) {
+            if (cpuGroupCosts[icpu] >= cpuGroupCostTarget) continue;
+            cpuGroupCosts[icpu] += it->cost;
+            it->icpu = icpu;
             ++it;
         }
     }
-    uint totalGroups = 0;
-    for (uint icpu = 0; icpu < cpus; ++icpu) {
-        totalGroups += cpuGroups[icpu].size();
-    }
     std::cout << "Calculated dependencies groups (cpus:" << cpus << ")" << std::endl;
-    std::cout << "Groups(we): " << groupsWithElements << "  cpuGroupSizeTarget: " << cpuGroupSizeTarget << "  totalGroups: " << totalGroups << std::endl;
+    std::cout << "Groups(we): " << groupsWithElements << "  cpuGroupCostTarget: " << cpuGroupCostTarget << "  totalCost: " << totalCost << std::endl;
 
     delete [] groupCounters;
-    delete [] cpuGroupSizes;
+    delete [] cpuGroupCosts;
+}
+
+void Expressions::distributeEvaluationGroupsAmoungCpus (void)
+{
+
+}
+
+void Expressions::updateEvalGroupWithDependencies ( void )
+{
+    for (auto it = evalGroups.begin())
 }
 
 
