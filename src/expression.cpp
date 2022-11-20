@@ -18,6 +18,8 @@ Expression::Expression (void)
     isZero = true;
     nextExpression = false;
     firstNonZeroEvaluation = 0;
+    evaluating = false;
+    icpu = false;
 }
 
 OperationValueType Expression::getAliasType (void) const

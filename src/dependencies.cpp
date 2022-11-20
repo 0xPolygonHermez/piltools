@@ -2,6 +2,8 @@
 #include "dependencies.hpp"
 #include "expression.hpp"
 
+#include "expressions.hpp"
+
 namespace pil {
 
 bool Dependencies::add(uid_t expressionId)
@@ -51,6 +53,12 @@ void Dependencies::dump ( void ) const
     std::cout << std::endl;
 }
 
-
+bool Dependencies::areEvaluated (const Expressions &expressions) const
+{
+    for (auto it = expressionIds.cbegin(); it != expressionIds.cend(); ++it) {
+        if (!expressions.isEvaluated(*it)) return false;
+    }
+    return true;
+}
 
 }

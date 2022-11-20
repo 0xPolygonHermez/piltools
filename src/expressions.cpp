@@ -179,6 +179,7 @@ FrElement Expressions::getEvaluation(uid_t id, omega_t w, uid_t evalGroupId)
         exit(1);
     }
     if (checkEvaluated && !expressions[id].evaluated) {
+        #pragma omp critical
         std::cerr << " no evaluated expression id:" << id << " evalGroupId:" << evalGroupId << std::endl;
         assert(false);
         exit(1);
@@ -272,6 +273,8 @@ void Expressions::evalAll(void)
     uint64_t cpuTimes[cpus];
     evaluationsDone = 0;
     activeCpus = cpus;
+    evalDependenciesIndex = 0;
+    allExpressionsEvaluated = false;
     updatePercentEvaluated();
 
     uint64_t startT = Tools::startCrono();
@@ -327,9 +330,73 @@ void Expressions::afterEvaluationsLoaded (void)
     }
 }
 
+bool Expressions::hasPendingDependencies (uid_t iexpr)
+{
+    return !expressions[iexpr].dependencies.areEvaluated(*this);
+}
+
+bool Expressions::nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &fromW, omega_t &toW, bool currentDone)
+{
+    uid_t idep;
+    uid_t exprIndex;
+    bool expressionFound = false;
+    while (!expressionFound) {
+        #pragma omp critical
+        {
+            if (currentDone) {
+                expressions[iexpr].setEvaluatedFlag(true);
+                evaluationsDone += 1;
+                std::cout << "Evaluating expressions " << Tools::percentBar(evaluationsDone, count, false) << " " << evaluationsDone << "/" << count << " (cpus:" << activeCpus << ")    \t\r" << std::flush;
+                currentDone = false;
+                // std::cout << "EVAL DONE CPU[" << icpu << "] " << exprIndex << std::endl;
+            }
+            bool finalLoop = (evalDependenciesIndex == 0);
+            while (!expressionFound && !allExpressionsEvaluated) {
+                if (evalDependenciesIndex >= dependencies.size()) {
+                    if (finalLoop) {
+                        allExpressionsEvaluated = true;
+                        break;
+                    }
+                    finalLoop = true;
+                    evalDependenciesIndex = 0;
+                }
+                while (evalDependenciesIndex < dependencies.size()) {
+                    idep = evalDependenciesIndex++;
+                    exprIndex = dependencies[idep];
+                    if (isEvaluated(exprIndex)) continue;
+                    finalLoop = false;
+                    if (isEvaluating(exprIndex)) continue;
+                    if (!hasPendingDependencies(exprIndex)) {
+                        expressions[exprIndex].setEvaluating(icpu);
+                        expressionFound = true;
+                        break;
+                    }
+                }
+            }
+            // if (expressionFound) std::cout << "EVAL START CPU[" << icpu << "] " << exprIndex << std::endl;
+        }
+        if (allExpressionsEvaluated) return false;
+        if (!expressionFound) return sleep(2);
+    }
+    fromW = 0;
+    toW = n-1;
+    iexpr = exprIndex;
+    return true;
+}
 
 void Expressions::evalAllCpuGroup (uid_t icpu)
 {
+    omega_t fromW, toW;
+    uid_t iexpr;
+    bool currentDone = false;
+
+    while (nextPedingEvalExpression(icpu, iexpr, fromW, toW, currentDone)) {
+        for (omega_t w = fromW; w <= toW; ++w) {
+            evaluations[ (uint64_t)n * iexpr + w ] = expressions[iexpr].eval(engine, w);
+        }
+        currentDone = true;
+    }
+    /*
     dim_t depCount = dependencies.size();
     for (uint idep = 0; idep < depCount; ++idep) {
         const uid_t iexpr = dependencies[idep];
@@ -343,6 +410,7 @@ void Expressions::evalAllCpuGroup (uid_t icpu)
         // std::cout << "expression[" << iexpr << "] evaluated" << std::endl;
         #endif
     }
+    */
 }
 
 Expressions::Expressions (Engine &engine)

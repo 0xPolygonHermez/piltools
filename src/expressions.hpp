@@ -53,17 +53,23 @@ class Expressions {
         omega_t getFirstNonZeroEvaluation (uid_t expressionId) { return expressions[expressionId].getFirstNonZeroEvaluation(); };
         void expandAlias (void);
         std::string getName (uid_t expressionId);
+        bool isEvaluated (uid_t expressionId) const { return expressions[expressionId].evaluated; };
+        bool isEvaluating (uid_t expressionId) const { return expressions[expressionId].isEvaluating(); };
 //        std::string getTextFormula (uid_t expressionId);
     protected:
         FrElement *evaluations;
         uint64_t evaluationsDone;
         uint activeCpus;
+        bool allExpressionsEvaluated;
+        uid_t evalDependenciesIndex;
 
         void compileExpression (nlohmann::json &pilExpressions, uid_t id);
         void resetGroups (void);
         void mergeGroup (uid_t toId, uid_t fromId);
         void recursiveSetGroup (uid_t exprId, uid_t groupId);
         void updatePercentEvaluated (uint incDone = 0);
+        bool nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &fromW, omega_t &toW, bool currentDone = false);
+        bool hasPendingDependencies (uid_t iexpr);
 };
 
 }

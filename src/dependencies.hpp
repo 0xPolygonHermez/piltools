@@ -14,17 +14,20 @@ namespace pil {
 
 namespace pil {
 
+class Expressions;
+
 class Dependencies {
     public:
         bool add (uid_t expressionId);
         bool onlyAddIfNew(Dependencies &globalDeps, uid_t expressionId);
         bool contains (uid_t expressionId);
         uint merge (Dependencies &deps);
-        size_t size ( void ) const { return expressionIds.size(); };
+        size_t size (void) const { return expressionIds.size(); };
         uid_t& operator[](int index) { return expressionIds[index]; };
-        Dependencies ( void ):globalDependencies(NULL) {};
-        Dependencies ( Dependencies &globalDependencies ): globalDependencies(&globalDependencies) {};
-        void dump ( void ) const;
+        Dependencies (void):globalDependencies(NULL) {};
+        Dependencies (Dependencies &globalDependencies ): globalDependencies(&globalDependencies) {};
+        void dump (void) const;
+        bool areEvaluated (const Expressions &expressions) const;
     protected:
         Dependencies *globalDependencies;
         std::vector<uid_t> expressionIds;
