@@ -41,7 +41,7 @@ namespace pil {
             uint replaceOperationValue(OperationValueType oldValueType, uint64_t oldValue, OperationValueType newValueType, uint64_t newValue);
             void setIsZeroFlag ( bool value, omega_t w = 0 ) { isZero = value; firstNonZeroEvaluation = w; };
             omega_t getFirstNonZeroEvaluation ( void ) { return firstNonZeroEvaluation; };
-            void setEvaluatedFlag ( bool value ) { evaluated = value; evaluating = false; };
+            void setEvaluatedFlag ( bool value ) { evaluated = value; if (evaluated) evaluating = false; };
             void setEvaluating (uid_t icpu) { evaluating = true; this->icpu = icpu; };
             bool isEvaluating (void) const { return evaluating; };
         protected:
