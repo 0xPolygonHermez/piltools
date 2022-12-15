@@ -1,6 +1,5 @@
 # Pil Tools
-###Pil Tools in C++
-to verify and query
+Pil Tools in C++ to verify and browse in evaluations
 
 ## pilverify
 syntax:
