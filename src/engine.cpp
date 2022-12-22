@@ -165,6 +165,10 @@ void Engine::calculateAllExpressions (void)
 {
     Block block("Calculate expressions");
     expressions.calculateGroup();
+    if (options.saveExpressions && !options.overwrite && access(options.expressionsFilename.c_str(), F_OK) == 0) {
+        std::cerr << "ERROR: expressions file " << options.expressionsVerifyFilename << " exists, use -o to overwrite" << std::endl;
+        exit(1);
+    }
     if (options.loadExpressions || options.saveExpressions) {
         mapExpressionsFile(options.saveExpressions);
     }

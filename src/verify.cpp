@@ -37,7 +37,7 @@ int main ( int argc, char *argv [])
         options.commitFilename = argv[1];
     }
 
-    while ((opt = getopt(argc, argv, "p:c:m:vV:j:S:l:s:id:u:")) != -1)
+    while ((opt = getopt(argc, argv, "p:c:m:vV:j:S:l:s:id:u:o")) != -1)
     {
         switch (opt)
         {
@@ -47,6 +47,10 @@ int main ( int argc, char *argv [])
 
             case 'c':
                 options.constFilename = optarg ;
+                break;
+
+            case 'o':
+                options.overwrite = true ;
                 break;
 
             case 'm':

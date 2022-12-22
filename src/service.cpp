@@ -57,7 +57,7 @@ std::list<std::string> Service::filterPols (const HttpContextPtr& ctx, const std
     std::list<std::string> result;
     auto included = new bool[polnames.size()]();
     while (std::getline(ss, pattern, ',')) {
-        std::regex rex = std::regex("(^" + Tools::replaceAll(Tools::replaceAll(pattern, ".", "\\."), "*", ".*") + "$)");
+        std::regex rex = std::regex("(^" + Tools::replaceAll(Tools::replaceAll(pattern, ".", "\\."), "*", ".*") + "$)", std::regex_constants::icase);
         uint index = 0;
         for (auto it = polnames.cbegin(); it != polnames.cend(); ++it, ++index) {
             if (included[index]) continue;
@@ -74,8 +74,6 @@ std::list<std::string> Service::filterPols (const HttpContextPtr& ctx, const std
 Service::QueryOptions Service::parseOptions (const HttpContextPtr& ctx)
 {
     QueryOptions options;
-    options.count = strtoull(ctx->param("count", "10").c_str(), NULL, 10);
-    if (options.count > 200) options.count = 200;
     options.from = strtoull(ctx->param("from", "0").c_str(), NULL, 10);
     options.nozeros = ctx->param("nozeros", "false") != "false";
     options.changes = ctx->param("changes", "false") != "false";
@@ -84,12 +82,15 @@ Service::QueryOptions Service::parseOptions (const HttpContextPtr& ctx)
     options.before = strtoull(ctx->param("before", "0").c_str(), NULL, 10);
     options.after = strtoull(ctx->param("after", "0").c_str(), NULL, 10);
     options.skip = strtoull(ctx->param("skip", "0").c_str(), NULL, 10);
-    options.exportTo = ctx->param("export", "");
     options.trigger = ctx->param("trigger");
     options.filter = ctx->param("filter");
 
+    options.exportTo = ctx->param("export", "");
     std::transform(options.exportTo.begin(), options.exportTo.end(), options.exportTo.begin(),
             [](unsigned char c){ return std::tolower(c); });
+
+    options.count = strtoull(ctx->param("count", "10").c_str(), NULL, 10);
+    if (options.exportTo.empty() && options.count > 200) options.count = 200;
 
     if (options.compact) {
         options.changes = false;

@@ -41,6 +41,7 @@ class EngineOptions {
         bool calculateExpressions = true;
         bool interactive = false;
         std::string sourcePath;
+        bool overwrite = false;
 };
 
 class Engine {
