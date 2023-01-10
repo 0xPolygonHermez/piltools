@@ -46,15 +46,15 @@ int main ( int argc, char *argv [])
                 break;
 
             case 'c':
-                options.constFilename = optarg ;
+                options.constFilename = optarg;
                 break;
 
             case 'o':
-                options.overwrite = true ;
+                options.overwrite = true;
                 break;
 
             case 'm':
-                options.commitFilename = optarg ;
+                options.commitFilename = optarg;
                 break;
 
             case 'v':

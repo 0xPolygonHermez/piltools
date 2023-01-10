@@ -213,7 +213,7 @@ int main(int argc, char** argv)
     options.checkConnections = false;
     options.checkIdentities = false;
 
-    while ((opt = getopt(argc, argv, "p:c:m:vV:j:S:l:s:d:C:")) != -1)
+    while ((opt = getopt(argc, argv, "p:c:m:vV:j:S:l:s:d:C:u:o")) != -1)
     {
         switch (opt)
         {
@@ -222,7 +222,11 @@ int main(int argc, char** argv)
                 break;
 
             case 'c':
-                options.constFilename = optarg ;
+                options.constFilename = optarg;
+                break;
+
+            case 'o':
+                options.overwrite = true;
                 break;
 
             case 'C':
@@ -230,7 +234,7 @@ int main(int argc, char** argv)
                 break;
 
             case 'm':
-                options.commitFilename = optarg ;
+                options.commitFilename = optarg;
                 break;
 
             case 'v':
@@ -259,6 +263,10 @@ int main(int argc, char** argv)
             case 's':
                 options.saveExpressions = true;
                 options.expressionsFilename = optarg;
+                break;
+
+            case 'u':
+                options.publicsFilename = optarg;
                 break;
 
             case 'd':
