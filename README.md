@@ -17,6 +17,18 @@ example of use:
 ```sh
 build/pilserver ../data/v0.3.0.0-rc.1-n21/zkevm.commit -p ../data/v0.3.0.0-rc.1-n21/main.pil.json -c ../data/v0.3.0.0-rc.1-n21/zkevm.const -l ../data/v0.3.0.0-rc.1-n21/zkevm.expr.bin -C config/server.conf
 ```
+
+## fibonacci sample
+syntax:
+```sh
+build/pilserver sample/fibonacci.commit -c sample/fibonacci.const -p sample/fibonacci_main.pil.json -u ../pil-stark/test/sm_fibonacci/fibonacci.input.json -C config/server.conf
+```
+
+example of use:
+```sh
+build/pilverify sample/fibonacci.commit -c sample/fibonacci.const -p sample/fibonacci_main.pil.json -u ../pil-stark/test/sm_fibonacci/fibonacci.input.json
+```
+
 # Build
 ```sh
 sudo apt update
@@ -32,5 +44,6 @@ ls
 ./configure
 make
 sudo make install
-
+cd ..
+make
 ```

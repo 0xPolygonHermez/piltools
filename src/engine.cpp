@@ -304,21 +304,20 @@ void Engine::loadPublics (void)
         std::string polType = (*it)["polType"];
 
         FrElement value;
-        if (publicsLoaded) {
-            value = Goldilocks::fromString(publicsJson[id]);
-        } else {
-            auto type = getReferenceType(name, polType);
-            switch(type) {
-                case ReferenceType::cmP:
-                    value = cmRefs.getEvaluation(polId, idx);
-                    break;
-                case ReferenceType::imP:
-                    // TODO: calculateValues
-                    // value = imRefs.getPolValue(polId, idx);
-                    throw std::runtime_error("imP reference "+name+" not supported yet");
-                default:
-                    throw std::runtime_error("Invalid type "+polType+" for public "+name);
-            }
+        auto type = getReferenceType(name, polType);
+        switch(type) {
+            case ReferenceType::cmP:
+                value = cmRefs.getEvaluation(polId, idx);
+                break;
+            case ReferenceType::imP:
+                if (publicsLoaded && !publicsJson[id].is_null()) {
+                    value = Goldilocks::fromU64(publicsJson[id]);
+                } else {
+                    value = imRefs.getEvaluation(polId, idx);
+                }
+                break;
+            default:
+                throw std::runtime_error("Invalid type "+polType+" for public "+name);
         }
         publics.add(id, name, value);
     }
