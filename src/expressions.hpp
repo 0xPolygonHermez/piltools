@@ -35,6 +35,7 @@ class Expressions {
             public:
                 ExpressionChunkState state;
                 uid_t icpu;
+            ExpressionChunk(void) { state = ExpressionChunkState::pending; };
         };
         ExpressionChunk *expressionChunks;
 

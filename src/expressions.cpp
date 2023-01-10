@@ -419,7 +419,9 @@ bool Expressions::nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &f
                     idep = evalDependenciesIndex;
                     exprIndex = dependencies[idep];
                     auto state = expressionChunks[exprIndex * EXPRESSION_EVAL_CHUNKS + chunkIndex].state;
-
+                    if (exprIndex == 20 || exprIndex == 27) {
+                        std::cout << "[" << icpu << "] LOOP " << exprIndex << " ST:" << static_cast<int>(state) << " chunkIndex:" << chunkIndex << std::endl;
+                    }
                     // if last chunkIndex, restart cycle, reset chunkIndex and increment evalDependenciesIndex
                     if (chunkIndex < (EXPRESSION_EVAL_CHUNKS - 1)) {
                         ++chunkIndex;
@@ -435,8 +437,11 @@ bool Expressions::nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &f
                     // lastLoop
                     finalLoop = false;
                     if (hasPendingDependencies(exprIndex)) {
-                        chunkIndex = 0;
-                        ++evalDependenciesIndex;
+                        // only increase evalDependeciesIndex if not increased before.
+                        if (idep == evalDependenciesIndex) {
+                            chunkIndex = 0;
+                            ++evalDependenciesIndex;
+                        }
                     } else {
                         markChunkAs(icpu, exprIndex, w, ExpressionChunkState::evaluating);
                         expressionFound = true;
