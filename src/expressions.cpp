@@ -276,6 +276,12 @@ void Expressions::evalAll(void)
         evaluations = new FrElement[count * (uint64_t)n];
     }
 
+    deltaW = engine.n / EXPRESSION_EVAL_CHUNKS;
+    std::cout << "deltaW: " << deltaW << std::endl;
+
+    if (!expressionChunks) {
+        expressionChunks = new ExpressionChunk[EXPRESSION_EVAL_CHUNKS * count];
+    }
     uint64_t cpuTimes[cpus];
     evaluationsDone = 0;
     activeCpus = cpus;
@@ -336,9 +342,40 @@ void Expressions::afterEvaluationsLoaded (void)
     }
 }
 
-bool Expressions::hasPendingDependencies (uid_t iexpr)
+bool Expressions::hasPendingDependencies (uid_t iexpr) const
 {
     return !expressions[iexpr].dependencies.areEvaluated(*this);
+}
+
+void Expressions::markChunkAs (uid_t icpu, uid_t iexpr, omega_t fromW, ExpressionChunkState state)
+{
+    omega_t chunkFromW = 0;
+    uid_t chuckStart = EXPRESSION_EVAL_CHUNKS * iexpr;
+    uid_t chunkEnd = chuckStart + EXPRESSION_EVAL_CHUNKS - 1;
+    uint evaluating = 0;
+    uint evaluated = 0;
+
+    for (uid_t chunk = chuckStart; chunk <= chunkEnd; ++chunk) {
+        if (fromW == chunkFromW) {
+            expressionChunks[chunk].state = state;
+            expressionChunks[chunk].icpu = icpu;
+        }
+        switch (expressionChunks[chunk].state) {
+            case ExpressionChunkState::pending:
+                break;
+            case ExpressionChunkState::evaluating:
+                ++evaluating;
+                break;
+            case ExpressionChunkState::evaluated:
+                ++evaluated;
+                break;
+        }
+        chunkFromW += deltaW;
+    }
+    // if all chunks have been evaluated then the expression has been evaluated
+    if (state == ExpressionChunkState::evaluated && evaluated == EXPRESSION_EVAL_CHUNKS) {
+        expressions[iexpr].setEvaluatedFlag(true);
+    }
 }
 
 bool Expressions::nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &fromW, omega_t &toW, bool currentDone)
@@ -346,21 +383,28 @@ bool Expressions::nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &f
     uid_t idep;
     uid_t exprIndex;
     bool expressionFound = false;
+    uid_t totalEvaluations = EXPRESSION_EVAL_CHUNKS * count;
     uint iloop = 0;
+    omega_t w;
+    // #pragma omp critical
+    // std::cout << "[" << icpu << "] nextPedingEvalExpression " << evalDependenciesIndex << std::endl;
     while (!expressionFound) {
         ++iloop;
         #pragma omp critical
         {
             if (currentDone) {
-                expressions[iexpr].setEvaluatedFlag(true);
+                markChunkAs(icpu, iexpr, fromW, ExpressionChunkState::evaluated);
                 evaluationsDone += 1;
-                std::cout << "Evaluating expressions " << Tools::percentBar(evaluationsDone, count, false) << " " << evaluationsDone << "/" << count << " (cpus:" << activeCpus << ")    \t\r" << std::flush;
+                std::cout << "Evaluating expressions " << Tools::percentBar(evaluationsDone, totalEvaluations, true) << " " << (uint)(evaluationsDone/EXPRESSION_EVAL_CHUNKS) << "/" << count << " (cpus:" << activeCpus << ")    \t\r" << std::flush;
                 currentDone = false;
                 // std::cout << "EVAL DONE CPU[" << icpu << "] " << exprIndex << std::endl;
             }
             bool finalLoop = (evalDependenciesIndex == 0);
+            uint chunkIndex = 0;
             while (!expressionFound && !allExpressionsEvaluated) {
                 if (evalDependenciesIndex >= dependencies.size()) {
+                    // if make a complete loop without pending elements, there aren't more pending elements
+                    // means all expressions was evaluated or are evaluating (assigned)
                     if (finalLoop) {
                         allExpressionsEvaluated = true;
                         break;
@@ -370,13 +414,31 @@ bool Expressions::nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &f
                     break;
                 }
                 while (evalDependenciesIndex < dependencies.size()) {
-                    idep = evalDependenciesIndex++;
+                    // calculate current values before increase (evalDependenciesIndex, chunkIndex)
+                    w = deltaW * chunkIndex;
+                    idep = evalDependenciesIndex;
                     exprIndex = dependencies[idep];
-                    if (isEvaluated(exprIndex)) continue;
-                    if (isEvaluating(exprIndex)) continue;
+                    auto state = expressionChunks[exprIndex * EXPRESSION_EVAL_CHUNKS + chunkIndex].state;
+
+                    // if last chunkIndex, restart cycle, reset chunkIndex and increment evalDependenciesIndex
+                    if (chunkIndex < (EXPRESSION_EVAL_CHUNKS - 1)) {
+                        ++chunkIndex;
+                    } else {
+                        chunkIndex = 0;
+                        ++evalDependenciesIndex;
+                    }
+                    // if state was evaluated or evaluating, it can't assigned.
+                    if (state == ExpressionChunkState::evaluated) continue;
+                    if (state == ExpressionChunkState::evaluating) continue;
+
+                    // if not evaluated or evaluating means pending, and this isn't final
+                    // lastLoop
                     finalLoop = false;
-                    if (!hasPendingDependencies(exprIndex)) {
-                        expressions[exprIndex].setEvaluating(icpu);
+                    if (hasPendingDependencies(exprIndex)) {
+                        chunkIndex = 0;
+                        ++evalDependenciesIndex;
+                    } else {
+                        markChunkAs(icpu, exprIndex, w, ExpressionChunkState::evaluating);
                         expressionFound = true;
                         break;
                     }
@@ -385,10 +447,10 @@ bool Expressions::nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &f
             // if (expressionFound) std::cout << "EVAL START CPU[" << icpu << "] " << exprIndex << std::endl;
         }
         if (allExpressionsEvaluated) return false;
-        if (!expressionFound && iloop > 1) return sleep(2);
+        if (!expressionFound && iloop > 1) return sleep(1);
     }
-    fromW = 0;
-    toW = n-1;
+    fromW = w;
+    toW = w + deltaW -1;
     iexpr = exprIndex;
     return true;
 }
@@ -400,10 +462,14 @@ void Expressions::evalAllCpuGroup (uid_t icpu)
     bool currentDone = false;
 
     while (nextPedingEvalExpression(icpu, iexpr, fromW, toW, currentDone)) {
+        #pragma omp critical
+        std::cout << "[" << icpu << "] START " << iexpr << " (" << fromW << ".." << toW << ")" << std::endl;
         currentDone = true;
         for (omega_t w = fromW; w <= toW; ++w) {
             evaluations[ (uint64_t)n * iexpr + w ] = expressions[iexpr].eval(engine, w);
         }
+        #pragma omp critical
+        std::cout << "[" << icpu << "] END " << iexpr << " (" << fromW << ".." << toW << ")" << std::endl;
     }
     /*
     dim_t depCount = dependencies.size();
@@ -431,12 +497,14 @@ Expressions::Expressions (Engine &engine)
     checkEvaluated = true;
     cpus = omp_get_max_threads();
     cpuGroups = new std::list<uid_t>[cpus];
+    expressionChunks = NULL;
 }
 
 Expressions::~Expressions (void)
 {
     if (!externalEvaluations && evaluations) delete [] evaluations;
     if (expressions) delete [] expressions;
+    if (expressionChunks) delete [] expressionChunks;
 }
 
 void Expressions::setEvaluations ( FrElement *data )

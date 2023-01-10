@@ -12,6 +12,8 @@ namespace pil {
 #include "operation_value.hpp"
 #include "omp.h"
 
+#define EXPRESSION_EVAL_CHUNKS 4
+
 namespace pil {
 
 class Expressions {
@@ -28,7 +30,15 @@ class Expressions {
         bool checkEvaluated;
         bool externalEvaluations;
 
-        void map (void *data) { evaluations = (FrElement *)data; }
+        enum class ExpressionChunkState { pending, evaluating, evaluated };
+        class ExpressionChunk {
+            public:
+                ExpressionChunkState state;
+                uid_t icpu;
+        };
+        ExpressionChunk *expressionChunks;
+
+        void map (void *data) { evaluations = (FrElement *)data; };
         FrElement getEvaluation (uid_t id, omega_t w, uid_t evalGroupId = GROUP_NONE);
         uint reduceNumberAliasExpressions (void);
         uint reduceAliasExpressions (void);
@@ -62,6 +72,7 @@ class Expressions {
         uint activeCpus;
         bool allExpressionsEvaluated;
         uid_t evalDependenciesIndex;
+        omega_t deltaW;
 
         void compileExpression (nlohmann::json &pilExpressions, uid_t id);
         void resetGroups (void);
@@ -69,7 +80,8 @@ class Expressions {
         void recursiveSetGroup (uid_t exprId, uid_t groupId);
         void updatePercentEvaluated (uint incDone = 0);
         bool nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &fromW, omega_t &toW, bool currentDone = false);
-        bool hasPendingDependencies (uid_t iexpr);
+        bool hasPendingDependencies (uid_t iexpr) const;
+        void markChunkAs (uid_t icpu, uid_t iexpr, omega_t fromW, ExpressionChunkState state);
 };
 
 }
