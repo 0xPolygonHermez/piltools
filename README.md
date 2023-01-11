@@ -52,3 +52,30 @@ git submodule init
 git submodule update
 make
 ```
+
+# Docker version
+All commands are run from the root piltools repo folder.
+
+## Build
+```sh
+make docker
+```
+
+## Sample usage
+```sh
+docker run -it --rm \
+    -v $PWD/sample:/app/sample \
+    -v $PWD/config:/app/config \
+    -p 8080:8080 \
+    piltools \
+    pilserver sample/fibonacci.commit -c sample/fibonacci.const -p sample/fibonacci_main.pil.json -u sample/fibonacci.input.json -C config/server.conf
+```
+
+```sh
+docker run -it --rm \
+    -v $PWD/sample:/app/sample \
+    -v $PWD/config:/app/config \
+    -p 8080:8080 \
+    piltools \
+    pilverify sample/fibonacci.commit -c sample/fibonacci.const -p sample/fibonacci_main.pil.json -u sample/fibonacci.input.json
+```
