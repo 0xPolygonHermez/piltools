@@ -21,12 +21,12 @@ build/pilserver ../data/v0.3.0.0-rc.1-n21/zkevm.commit -p ../data/v0.3.0.0-rc.1-
 ## fibonacci sample
 syntax:
 ```sh
-build/pilserver sample/fibonacci.commit -c sample/fibonacci.const -p sample/fibonacci_main.pil.json -u ../pil-stark/test/sm_fibonacci/fibonacci.input.json -C config/server.conf
+build/pilserver sample/fibonacci.commit -c sample/fibonacci.const -p sample/fibonacci_main.pil.json -u sample/fibonacci.input.json -C config/server.conf
 ```
 
 example of use:
 ```sh
-build/pilverify sample/fibonacci.commit -c sample/fibonacci.const -p sample/fibonacci_main.pil.json -u ../pil-stark/test/sm_fibonacci/fibonacci.input.json
+build/pilverify sample/fibonacci.commit -c sample/fibonacci.const -p sample/fibonacci_main.pil.json -u sample/fibonacci.input.json
 ```
 
 # Build
@@ -38,12 +38,17 @@ sudo apt install nlohmann-json3-dev
 sudo apt install libgmp-dev
 sudo apt install libreadline-dev
 
+# out of folder piltools
 git clone https://github.com/ithewei/libhv.git
 cd libhv
-ls
 ./configure
 make
 sudo make install
 cd ..
+
+# go to piltools folder
+cd piltools
+git submodule init
+git submodule update
 make
 ```

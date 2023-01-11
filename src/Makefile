@@ -33,9 +33,11 @@ PIL_VERIFY_INCLUDES = $(COMMON_INCLUDES) interactive.hpp
 all: $(PIL_VERIFY) $(PIL_SERVER)
 
 $(PIL_VERIFY): $(PIL_VERIFY_SOURCES) $(PIL_VERIFY_INCLUDES)
+	mkdir -p ../build
 	$(CC) $(CFLAGS) -o $(PIL_VERIFY) -DPIL_VERIFY $(PIL_VERIFY_SOURCES) $(GOLDI_CPP) $(LDFLAGS) -lreadline
 
 $(PIL_SERVER): $(PIL_SERVER_SOURCES) $(PIL_SERVER_INCLUDES)
+	mkdir -p ../build
 	$(CC) $(CFLAGS) -o $(PIL_SERVER) -I /usr/local/include/hv -DPIL_SERVER $(PIL_SERVER_SOURCES) $(GOLDI_CPP) $(LDFLAGS) -lhv
 
 clean:
