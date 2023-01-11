@@ -82,6 +82,7 @@ class Expressions {
         void updatePercentEvaluated (uint incDone = 0);
         bool nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &fromW, omega_t &toW, bool currentDone = false);
         bool hasPendingDependencies (uid_t iexpr) const;
+        bool hasNextDependency (uid_t iexpr) const;
         void markChunkAs (uid_t icpu, uid_t iexpr, omega_t fromW, ExpressionChunkState state);
 };
 

@@ -282,6 +282,7 @@ void Expressions::evalAll(void)
     if (!expressionChunks) {
         expressionChunks = new ExpressionChunk[EXPRESSION_EVAL_CHUNKS * count];
     }
+
     uint64_t cpuTimes[cpus];
     evaluationsDone = 0;
     activeCpus = cpus;
@@ -300,6 +301,7 @@ void Expressions::evalAll(void)
         }
     }
 
+
     uint64_t maxTime = 0;
     uint64_t totalTime = 0;
     for (uint icpu = 0; icpu < cpus; ++icpu) {
@@ -314,7 +316,6 @@ void Expressions::evalAll(void)
     }
     printf("CPU usage: %0.2f%%  ms: %lu  goal: %lu\n", ((double)totalTime * 100.0)/((double)maxTime * cpus), maxTime, totalTime/cpus);
     std::cout << "CPU usage: --- CPU STATISTICS ---" << std::endl;
-
     expandAlias();
 }
 
@@ -345,6 +346,11 @@ void Expressions::afterEvaluationsLoaded (void)
 bool Expressions::hasPendingDependencies (uid_t iexpr) const
 {
     return !expressions[iexpr].dependencies.areEvaluated(*this);
+}
+
+bool Expressions::hasNextDependency (uid_t iexpr) const
+{
+    return expressions[iexpr].nextExpression;
 }
 
 void Expressions::markChunkAs (uid_t icpu, uid_t iexpr, omega_t fromW, ExpressionChunkState state)
@@ -400,6 +406,7 @@ bool Expressions::nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &f
                 // std::cout << "EVAL DONE CPU[" << icpu << "] " << exprIndex << std::endl;
             }
             bool finalLoop = (evalDependenciesIndex == 0);
+            bool previousChunksEvaluated = true;
             uint chunkIndex = 0;
             while (!expressionFound && !allExpressionsEvaluated) {
                 if (evalDependenciesIndex >= dependencies.size()) {
@@ -414,16 +421,23 @@ bool Expressions::nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &f
                     break;
                 }
                 while (evalDependenciesIndex < dependencies.size()) {
+                    // TODO: check if has pendingDependencies or no other cpus evaluating, to
+                    // get best performance use same cpu.
+                    if (hasPendingDependencies(dependencies[evalDependenciesIndex])) {
+                        chunkIndex = 0;
+                        ++evalDependenciesIndex;
+                    }
                     // calculate current values before increase (evalDependenciesIndex, chunkIndex)
+                    if (chunkIndex == 0) {
+                        previousChunksEvaluated = true;
+                    }
                     w = deltaW * chunkIndex;
                     idep = evalDependenciesIndex;
                     exprIndex = dependencies[idep];
                     auto state = expressionChunks[exprIndex * EXPRESSION_EVAL_CHUNKS + chunkIndex].state;
-                    if (exprIndex == 20 || exprIndex == 27) {
-                        std::cout << "[" << icpu << "] LOOP " << exprIndex << " ST:" << static_cast<int>(state) << " chunkIndex:" << chunkIndex << std::endl;
-                    }
+
                     // if last chunkIndex, restart cycle, reset chunkIndex and increment evalDependenciesIndex
-                    if (chunkIndex < (EXPRESSION_EVAL_CHUNKS - 1)) {
+                    if (chunkIndex < (EXPRESSION_EVAL_CHUNKS - 1) && (!hasNextDependency(exprIndex) || previousChunksEvaluated)) {
                         ++chunkIndex;
                     } else {
                         chunkIndex = 0;
@@ -431,6 +445,8 @@ bool Expressions::nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &f
                     }
                     // if state was evaluated or evaluating, it can't assigned.
                     if (state == ExpressionChunkState::evaluated) continue;
+
+                    previousChunksEvaluated = false;
                     if (state == ExpressionChunkState::evaluating) continue;
 
                     // if not evaluated or evaluating means pending, and this isn't final
@@ -462,8 +478,9 @@ bool Expressions::nextPedingEvalExpression (uid_t icpu, uid_t &iexpr, omega_t &f
 
 void Expressions::evalAllCpuGroup (uid_t icpu)
 {
-    omega_t fromW, toW;
-    uid_t iexpr;
+    omega_t fromW = 0;
+    omega_t toW = 0;
+    uid_t iexpr = 0;
     bool currentDone = false;
 
     while (nextPedingEvalExpression(icpu, iexpr, fromW, toW, currentDone)) {
