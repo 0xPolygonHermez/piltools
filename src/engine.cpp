@@ -404,7 +404,7 @@ int Engine::onErrorNotFoundPlookupValue(dim_t index, const std::string &value, o
 {
     const std::string location = (std::string)(pil["plookupIdentities"][index]["fileName"]) + ":" + std::to_string((uint)(pil["plookupIdentities"][index]["line"]));
     std::stringstream ss;
-    ss << "Plookup #" << index << " " << location << " w:" << w << " not found " << expressions.valuesBinToString(value) << std::endl;
+    ss << "[\x1B[1;31mFAIL\x1B[0m] Plookup #" << index << " " << location << " w:" << w << " not found " << expressions.valuesBinToString(value) << std::endl;
     #pragma omp critical
     {
         std::cerr << ss.str() << std::endl;
@@ -473,7 +473,7 @@ int Engine::onErrorPermutationValue(dim_t index, const std::string &value, omega
 {
     const std::string location = (std::string)(pil["permutationIdentities"][index]["fileName"]) + ":" + std::to_string((uint)(pil["permutationIdentities"][index]["line"]));
     std::stringstream ss;
-    ss << "Permutation #" << index << " " << location;
+    ss << "[\x1B[1;31mFAIL\x1B[0m] Permutation #" << index << " " << location;
     switch (e) {
         case PermutationError::notFound: ss << " w:" << w << " not found "; break;
         case PermutationError::notEnought: ss << " w:" << w << " not enougth value "; break;
