@@ -1,0 +1,8 @@
+constant %N = 4;
+             namespace Global(%N);
+             pol constant L1;    // 1, 0, 0, 0, 0
+             namespace PermutationExample(%N);
+             pol constant b1,b2;
+             pol commit a1, a2;
+             b1{a1} is b2{a2};
+            
