@@ -559,9 +559,10 @@ void Engine::prepareT (nlohmann::json& identities, const std::string &label, Set
         }
 
         for (omega_t w = 0; w < n; ++w) {
-            if (hasSelT && Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
+            auto selValue = expressions.getEvaluation(selT, w);
+            if (hasSelT && Goldilocks::isZero(selValue)) continue;
             // if (identityIndex == 30) std::cout << "T;30;" << w << ";" << expressions.valuesToString(ts, tCount, w) << std::endl;
-            set(identityIndex, expressions.valuesToBinString(ts, tCount, w), w);
+            set(identityIndex, expressions.valuesToBinString(selValue, ts, tCount, w), w);
         }
         updatePercentT("preparing "+label+" selT/T ", done, identitiesCount);
     }
@@ -596,12 +597,9 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, Chec
             omega_t w1 = wn * ichunk;
             omega_t w2 = (ichunk == (chunks - 1)) ? n: w1 + wn;
             for (omega_t w = w1; w < w2; ++w) {
-                if (hasSelF && Goldilocks::isZero(expressions.getEvaluation(selF, w))) continue;
-                #pragma omp critical
-                {
-                    if (identityIndex == 30) std::cout << "F;30;" << w << ";" << expressions.valuesToString(fs, fCount, w) << std::endl;
-                }
-                if (check(identityIndex, expressions.valuesToBinString(fs, fCount, w), w) == 0 ) {
+                auto selValue = expressions.getEvaluation(selF, w);
+                if (hasSelF && Goldilocks::isZero(selValue)) continue;
+                if (check(identityIndex, expressions.valuesToBinString(selValue, fs, fCount, w), w) == 0 ) {
                     ichunk = chunks;
                     w2 = n;
                     break;
