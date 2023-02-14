@@ -106,7 +106,7 @@ omega_t Service::getTriggeredOmega (const QueryOptions &options, omega_t w)
     std::string polname = options.trigger.substr(0, pos);
     FrElement value = Goldilocks::fromString(options.trigger.substr(pos + 1), 10);
     auto ref = engine.getDirectReference(polname);
-    for (uint index = 0; index <= options.skip; ++index) {
+    for (int index = 0; index <= options.skip; ++index) {
         while (w < engine.n && !Goldilocks::equal(ref->getEvaluation(w), value)) {
             ++w;
         }
