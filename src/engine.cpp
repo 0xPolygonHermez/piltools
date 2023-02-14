@@ -165,6 +165,10 @@ void Engine::calculateAllExpressions (void)
 {
     Block block("Calculate expressions");
     expressions.calculateGroup();
+    if (options.saveExpressions && !options.overwrite && access(options.expressionsFilename.c_str(), F_OK) == 0) {
+        std::cerr << "ERROR: expressions file " << options.expressionsVerifyFilename << " exists, use -o to overwrite" << std::endl;
+        exit(1);
+    }
     if (options.loadExpressions || options.saveExpressions) {
         mapExpressionsFile(options.saveExpressions);
     }
@@ -300,21 +304,20 @@ void Engine::loadPublics (void)
         std::string polType = (*it)["polType"];
 
         FrElement value;
-        if (publicsLoaded) {
-            value = Goldilocks::fromString(publicsJson[id]);
-        } else {
-            auto type = getReferenceType(name, polType);
-            switch(type) {
-                case ReferenceType::cmP:
-                    value = cmRefs.getEvaluation(polId, idx);
-                    break;
-                case ReferenceType::imP:
-                    // TODO: calculateValues
-                    // value = imRefs.getPolValue(polId, idx);
-                    throw std::runtime_error("imP reference "+name+" not supported yet");
-                default:
-                    throw std::runtime_error("Invalid type "+polType+" for public "+name);
-            }
+        auto type = getReferenceType(name, polType);
+        switch(type) {
+            case ReferenceType::cmP:
+                value = cmRefs.getEvaluation(polId, idx);
+                break;
+            case ReferenceType::imP:
+                if (publicsLoaded && !publicsJson[id].is_null()) {
+                    value = Goldilocks::fromU64(publicsJson[id]);
+                } else {
+                    value = imRefs.getEvaluation(polId, idx);
+                }
+                break;
+            default:
+                throw std::runtime_error("Invalid type "+polType+" for public "+name);
         }
         publics.add(id, name, value);
     }
@@ -401,7 +404,7 @@ int Engine::onErrorNotFoundPlookupValue(dim_t index, const std::string &value, o
 {
     const std::string location = (std::string)(pil["plookupIdentities"][index]["fileName"]) + ":" + std::to_string((uint)(pil["plookupIdentities"][index]["line"]));
     std::stringstream ss;
-    ss << "Plookup #" << index << " " << location << " w:" << w << " not found " << expressions.valuesBinToString(value) << std::endl;
+    ss << "[\x1B[1;31mFAIL\x1B[0m] Plookup #" << index << " " << location << " w:" << w << " not found " << expressions.valuesBinToString(value) << std::endl;
     #pragma omp critical
     {
         std::cerr << ss.str() << std::endl;
@@ -470,7 +473,7 @@ int Engine::onErrorPermutationValue(dim_t index, const std::string &value, omega
 {
     const std::string location = (std::string)(pil["permutationIdentities"][index]["fileName"]) + ":" + std::to_string((uint)(pil["permutationIdentities"][index]["line"]));
     std::stringstream ss;
-    ss << "Permutation #" << index << " " << location;
+    ss << "[\x1B[1;31mFAIL\x1B[0m] Permutation #" << index << " " << location;
     switch (e) {
         case PermutationError::notFound: ss << " w:" << w << " not found "; break;
         case PermutationError::notEnought: ss << " w:" << w << " not enougth value "; break;
@@ -556,9 +559,10 @@ void Engine::prepareT (nlohmann::json& identities, const std::string &label, Set
         }
 
         for (omega_t w = 0; w < n; ++w) {
-            if (hasSelT && Goldilocks::isZero(expressions.getEvaluation(selT, w))) continue;
+            auto selValue = expressions.getEvaluation(selT, w);
+            if (hasSelT && Goldilocks::isZero(selValue)) continue;
             // if (identityIndex == 30) std::cout << "T;30;" << w << ";" << expressions.valuesToString(ts, tCount, w) << std::endl;
-            set(identityIndex, expressions.valuesToBinString(ts, tCount, w), w);
+            set(identityIndex, expressions.valuesToBinString(selValue, ts, tCount, w), w);
         }
         updatePercentT("preparing "+label+" selT/T ", done, identitiesCount);
     }
@@ -593,12 +597,9 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, Chec
             omega_t w1 = wn * ichunk;
             omega_t w2 = (ichunk == (chunks - 1)) ? n: w1 + wn;
             for (omega_t w = w1; w < w2; ++w) {
-                if (hasSelF && Goldilocks::isZero(expressions.getEvaluation(selF, w))) continue;
-                #pragma omp critical
-                {
-                    if (identityIndex == 30) std::cout << "F;30;" << w << ";" << expressions.valuesToString(fs, fCount, w) << std::endl;
-                }
-                if (check(identityIndex, expressions.valuesToBinString(fs, fCount, w), w) == 0 ) {
+                auto selValue = expressions.getEvaluation(selF, w);
+                if (hasSelF && Goldilocks::isZero(selValue)) continue;
+                if (check(identityIndex, expressions.valuesToBinString(selValue, fs, fCount, w), w) == 0 ) {
                     ichunk = chunks;
                     w2 = n;
                     break;

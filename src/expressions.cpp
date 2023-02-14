@@ -105,14 +105,15 @@ uint Expressions::reduceNumberAliasExpressions (void)
     return count;
 }
 
-std::string Expressions::valuesToBinString(uid_t *values, dim_t size, omega_t w)
+std::string Expressions::valuesToBinString(Goldilocks::Element &selValue, uid_t *values, dim_t size, omega_t w)
 {
-    uint64_t elements[size];
+    uint64_t elements[size+1];
+    elements[0] = Goldilocks::toU64(selValue);
     for (dim_t index = 0; index < size; ++index) {
-        elements[index] = Goldilocks::toU64(getEvaluation(values[index], w));
+        elements[index+1] = Goldilocks::toU64(getEvaluation(values[index], w));
     }
     std::string result;
-    result.append((char *)elements, size * 8);
+    result.append((char *)elements, (size + 1) * 8);
     return result;
 }
 
