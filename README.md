@@ -79,3 +79,7 @@ docker run -it --rm \
     piltools \
     pilverify sample/fibonacci.commit -c sample/fibonacci.const -p sample/fibonacci_main.pil.json -u sample/fibonacci.input.json
 ```
+It's possible add flag -s \<filename> to **save** evaluation on a file, or flag -l \<filename\> to load evaluation from file.
+```sh
+pilverify build/proof/zkevm.commit -c build/proof/zkevm.const -p build/proof/pil/main.pil.json -s build/proof/zkevm.expr
+```
