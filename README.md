@@ -1,6 +1,5 @@
 # Pil Tools
-###Pil Tools in C++
-to verify and query
+Pil Tools in C++ to verify and browse in evaluations
 
 ## pilverify
 syntax:
@@ -52,7 +51,6 @@ git submodule init
 git submodule update
 make
 ```
-
 # Docker version
 All commands are run from the root piltools repo folder.
 
@@ -83,3 +81,13 @@ It's possible add flag -s \<filename> to **save** evaluation on a file, or flag 
 ```sh
 pilverify build/proof/zkevm.commit -c build/proof/zkevm.const -p build/proof/pil/main.pil.json -s build/proof/zkevm.expr
 ```
+## License
+Licensed under either of
+
+Apache License, Version 2.0, (LICENSE-APACHE or http://www.apache.org/licenses/LICENSE-2.0)
+MIT license (LICENSE-MIT or http://opensource.org/licenses/MIT) at your option.
+Contribution
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+### Disclaimer
+This code has not yet been audited, and should not be used in any production systems.
