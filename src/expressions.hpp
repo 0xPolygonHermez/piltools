@@ -44,9 +44,9 @@ class Expressions {
         Expressions (Engine &engine);
         ~Expressions ( void );
         bool isZero(uid_t id);
-        std::string valuesToBinString(Goldilocks::Element &selValue, uid_t *values, dim_t size, omega_t w);
+        std::string valuesToBinString(const Goldilocks::Element &selValue, uid_t *values, dim_t size, omega_t w);
         std::string valuesBinToString(const std::string &values);
-        std::string valuesToString(uid_t *values, dim_t size, omega_t w);
+        std::string valuesToString(const Goldilocks::Element &selValue, uid_t *values, dim_t size, omega_t w);
         void setEvaluations(FrElement *evaluations);
         dim_t getEvaluationsSize (void) { return (uint64_t)count * (uint64_t)n * sizeof(FrElement); };
         void afterEvaluationsLoaded (void);

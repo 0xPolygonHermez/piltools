@@ -431,10 +431,11 @@ void Engine::checkPlookupIdentities (void)
 
     auto startT = Tools::startCrono();
 
-    prepareT(identities, "Plookup", [tt, tCount, cyclic](dim_t index, const std::string &value, omega_t w) {   cyclic[index].cycle(w);
-                                                                                                               ++tCount[index];
-                                                                                                               tt[index].insert(value);
-                                                                                                               return 0; });
+    prepareT(identities, "Plookup", [tt, tCount, cyclic](dim_t index, const std::string &value, omega_t w) {
+                                                                                                            cyclic[index].cycle(w);
+                                                                                                            ++tCount[index];
+                                                                                                            tt[index].insert(value);
+                                                                                                            return 0; });
     verifyF(identities, "Plookup", [tt, fCount,this](dim_t index, const std::string &value, omega_t w) {
                                                                         ++fCount[index];
                                                                         int result = tt[index].count(value);
@@ -559,9 +560,8 @@ void Engine::prepareT (nlohmann::json& identities, const std::string &label, Set
         }
 
         for (omega_t w = 0; w < n; ++w) {
-            auto selValue = expressions.getEvaluation(selT, w);
-            if (hasSelT && Goldilocks::isZero(selValue)) continue;
-            // if (identityIndex == 30) std::cout << "T;30;" << w << ";" << expressions.valuesToString(ts, tCount, w) << std::endl;
+            auto selValue = hasSelT ? expressions.getEvaluation(selT, w) : Goldilocks::one();
+            if (Goldilocks::isZero(selValue)) continue;
             set(identityIndex, expressions.valuesToBinString(selValue, ts, tCount, w), w);
         }
         updatePercentT("preparing "+label+" selT/T ", done, identitiesCount);
@@ -597,8 +597,8 @@ void Engine::verifyF (nlohmann::json& identities, const std::string &label, Chec
             omega_t w1 = wn * ichunk;
             omega_t w2 = (ichunk == (chunks - 1)) ? n: w1 + wn;
             for (omega_t w = w1; w < w2; ++w) {
-                auto selValue = expressions.getEvaluation(selF, w);
-                if (hasSelF && Goldilocks::isZero(selValue)) continue;
+                auto selValue = hasSelF ? expressions.getEvaluation(selF, w) : Goldilocks::one();
+                if (Goldilocks::isZero(selValue)) continue;
                 if (check(identityIndex, expressions.valuesToBinString(selValue, fs, fCount, w), w) == 0 ) {
                     ichunk = chunks;
                     w2 = n;
