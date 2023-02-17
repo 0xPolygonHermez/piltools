@@ -105,7 +105,7 @@ uint Expressions::reduceNumberAliasExpressions (void)
     return count;
 }
 
-std::string Expressions::valuesToBinString(Goldilocks::Element &selValue, uid_t *values, dim_t size, omega_t w)
+std::string Expressions::valuesToBinString(const Goldilocks::Element &selValue, uid_t *values, dim_t size, omega_t w)
 {
     uint64_t elements[size+1];
     elements[0] = Goldilocks::toU64(selValue);
@@ -118,12 +118,12 @@ std::string Expressions::valuesToBinString(Goldilocks::Element &selValue, uid_t 
 }
 
 
-std::string Expressions::valuesToString(uid_t *values, dim_t size, omega_t w)
+std::string Expressions::valuesToString(const Goldilocks::Element &selValue, uid_t *values, dim_t size, omega_t w)
 {
     std::stringstream ss;
+    ss << Goldilocks::toString(selValue);
     for (dim_t index = 0; index < size; ++index) {
-        if (index) ss << ",";
-        ss << Goldilocks::toString(getEvaluation(values[index], w));
+        ss << "," << Goldilocks::toString(getEvaluation(values[index], w));
     }
     return ss.str();
 }
