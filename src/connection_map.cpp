@@ -39,10 +39,9 @@ void ConnectionMap::generate (void)
 {
     auto startT = Tools::startCrono();
     FrElement ks[nk];
-    ks[0] = Goldilocks::one();
-    getKs(ks+1, nk-1);
+    getKs(ks, nk);
 
-    const FrElement wi = Goldilocks::w(pow);
+    const FrElement wi = getRoot(pow);
     uint64_t *elements = new uint64_t[n];
 
     const std::string calculatingTitle = "Calculating w ... ";
